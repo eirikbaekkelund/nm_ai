@@ -6,6 +6,7 @@ Usage:
 """
 
 import argparse
+import json
 import logging
 import sys
 import time
@@ -43,10 +44,11 @@ def _auto_batch_size() -> int:
 
 def _auto_num_workers() -> int:
     """Conservative workers: 4 on Windows (spawn), min(8, cores-2) on Linux."""
-    import os, sys
+    import os
+    import platform
 
     cores = os.cpu_count() or 4
-    if sys.platform == "win32":
+    if platform.system() == "Windows":
         return min(8, cores)
     return min(8, max(1, cores - 2))
 
@@ -70,13 +72,23 @@ def parse_args():
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
     args = parse_args()
     save_dir = Path(args.save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
+
+    # Log to both console and file
+    log_file = save_dir / "train.log"
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler(log_file, mode="w", encoding="utf-8"),
+        ],
+    )
+    # JSON metrics log — one line per event, easy to parse
+    metrics_file = save_dir / "metrics.jsonl"
+    metrics_fh = open(metrics_file, "w", encoding="utf-8")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if device.type == "cuda":
@@ -131,6 +143,24 @@ def main():
     )
     logger.info("Reference images: %d across %d products", len(ref_val_ds), len(set(ref_val_ds.labels)))
 
+    # Log full config to JSON
+    config_record = {
+        "event": "config",
+        "epochs": args.epochs,
+        "batch_size": args.batch_size,
+        "lr": args.lr,
+        "num_workers": args.num_workers,
+        "val_every": args.val_every,
+        "train_batches": len(train_loader),
+        "val_batches": len(val_loader),
+        "n_ref_images": len(ref_val_ds),
+        "n_ref_products": len(set(ref_val_ds.labels)),
+        "device": str(device),
+        "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu",
+    }
+    metrics_fh.write(json.dumps(config_record) + "\n")
+    metrics_fh.flush()
+
     # --- Training loop ---
     best_recall1 = 0.0
     use_amp = device.type == "cuda"
@@ -173,25 +203,54 @@ def main():
 
         avg_loss = epoch_loss / max(n_batches, 1)
         elapsed = time.time() - t0
+        lr_now = scheduler.get_last_lr()[0]
         logger.info(
             "Epoch %d/%d — loss: %.4f, lr: %.2e, time: %.1fs",
             epoch + 1,
             args.epochs,
             avg_loss,
-            scheduler.get_last_lr()[0],
+            lr_now,
             elapsed,
         )
+        metrics_fh.write(
+            json.dumps(
+                {
+                    "event": "epoch",
+                    "epoch": epoch + 1,
+                    "train_loss": round(avg_loss, 4),
+                    "lr": lr_now,
+                    "time_s": round(elapsed, 1),
+                }
+            )
+            + "\n"
+        )
+        metrics_fh.flush()
 
         # --- Validation ---
         if (epoch + 1) % args.val_every == 0 or epoch == args.epochs - 1:
-            metrics = validate(model, val_loader, ref_val_loader, device)
+            metrics = validate(model, val_loader, ref_val_loader, device, loss_fn=loss_fn)
+            w_top1 = metrics.get("w_acc_top1", 0)
+            w_top5 = metrics.get("w_acc_top5", 0)
             logger.info(
-                "  Val: R@1=%.4f R@5=%.4f (n_val=%d, n_ref=%d)",
+                "  Val: R@1=%.4f R@5=%.4f | W_acc@1=%.4f W_acc@5=%.4f (n_val=%d, n_ref=%d)",
                 metrics["recall@1"],
                 metrics["recall@5"],
+                w_top1,
+                w_top5,
                 metrics["n_val"],
                 metrics["n_ref_categories"],
             )
+            metrics_fh.write(
+                json.dumps(
+                    {
+                        "event": "val",
+                        "epoch": epoch + 1,
+                        **{k: round(v, 4) if isinstance(v, float) else v for k, v in metrics.items()},
+                    }
+                )
+                + "\n"
+            )
+            metrics_fh.flush()
 
             # Save best checkpoint
             if metrics["recall@1"] > best_recall1:
@@ -217,6 +276,17 @@ def main():
     }
     torch.save(final_checkpoint, save_dir / "final.pt")
     logger.info("Training complete. Best R@1: %.4f", best_recall1)
+    metrics_fh.write(
+        json.dumps(
+            {
+                "event": "done",
+                "best_recall1": round(best_recall1, 4),
+                "final_train_loss": round(avg_loss, 4),
+            }
+        )
+        + "\n"
+    )
+    metrics_fh.close()
 
 
 if __name__ == "__main__":

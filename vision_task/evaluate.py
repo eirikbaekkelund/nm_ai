@@ -1,8 +1,9 @@
 """
 Recall@K evaluation for the classifier.
 
-Embeds validation crops and reference images, computes cosine similarity,
-and reports Recall@1 and Recall@5.
+Two eval modes:
+  1. Gallery matching: cosine sim between val embeddings and reference gallery (frozen baseline)
+  2. W-based accuracy: classify via ArcFace logits (embeddings @ W.T) — tracks head training
 
 Usage:
     from vision_task.evaluate import validate
@@ -10,6 +11,7 @@ Usage:
 
 import torch
 import torch.nn.functional as F
+from torch.amp import autocast
 from torch.utils.data import DataLoader
 
 
@@ -26,7 +28,8 @@ def embed_dataset(model, dataloader: DataLoader, device: torch.device):
     model.eval()
     for images, labels in dataloader:
         images = images.to(device, non_blocking=True)
-        embs = model(images)
+        with autocast("cuda", dtype=torch.bfloat16, enabled=device.type == "cuda"):
+            embs = model(images)
         embs = F.normalize(embs.float(), dim=1)
         all_embs.append(embs.cpu())
         all_labels.extend(
@@ -92,17 +95,53 @@ def compute_recall_at_k(
 
 
 @torch.no_grad()
-def validate(model, val_loader: DataLoader, ref_loader: DataLoader, device: torch.device):
-    """Full validation pipeline: embed val + ref, aggregate refs, compute recall.
+def compute_w_accuracy(val_embs, val_labels, loss_fn, device):
+    """Classify val embeddings via ArcFace W matrix (no margin, just cosine logits).
+
+    This measures whether the ArcFace head is learning to separate classes,
+    independent of the reference gallery.
+
+    Args:
+        val_embs: [N, 768] L2-normalized
+        val_labels: [N] category_ids
+        loss_fn: ArcFaceLoss with trained W matrix
+        device: torch device
+
+    Returns:
+        dict with w_acc_top1, w_acc_top5
+    """
+    # ArcFace W shape: [embedding_dim, num_classes] in pytorch-metric-learning
+    W = loss_fn.W  # [768, 356]
+    W_norm = F.normalize(W, dim=0)  # L2-normalize each class column
+
+    # Cosine logits: [N, num_classes]
+    logits = val_embs.to(device) @ W_norm
+
+    results = {}
+    for k, name in [(1, "w_acc_top1"), (5, "w_acc_top5")]:
+        topk_preds = logits.topk(k, dim=1).indices  # [N, k]
+        correct = (topk_preds == val_labels.to(device).unsqueeze(1)).any(dim=1)
+        results[name] = correct.float().mean().item()
+
+    return results
+
+
+@torch.no_grad()
+def validate(model, val_loader: DataLoader, ref_loader: DataLoader, device: torch.device, loss_fn=None):
+    """Full validation pipeline.
+
+    Reports both gallery-matching recall (frozen baseline) and W-based accuracy
+    (tracks ArcFace head training).
 
     Args:
         model: GroceryEmbedder
         val_loader: validation shelf crops
         ref_loader: reference product images (eval transform)
         device: torch device
+        loss_fn: optional ArcFaceLoss — if provided, also computes W-based accuracy
 
     Returns:
-        dict with recall@1, recall@5, n_val, n_ref_categories
+        dict with recall@1, recall@5, w_acc_top1, w_acc_top5, n_val, n_ref_categories
     """
     model.eval()
 
@@ -113,9 +152,14 @@ def validate(model, val_loader: DataLoader, ref_loader: DataLoader, device: torc
     ref_embs_raw, ref_labels_raw = embed_dataset(model, ref_loader, device)
     ref_embs, ref_labels = aggregate_ref_embeddings(ref_embs_raw, ref_labels_raw)
 
-    # Compute recall
+    # Gallery-matching recall (frozen DINOv2 baseline)
     metrics = compute_recall_at_k(val_embs, val_labels, ref_embs, ref_labels, k_values=(1, 5))
     metrics["n_val"] = len(val_labels)
     metrics["n_ref_categories"] = len(ref_labels)
+
+    # W-based accuracy (tracks ArcFace head learning)
+    if loss_fn is not None:
+        w_metrics = compute_w_accuracy(val_embs, val_labels, loss_fn, device)
+        metrics.update(w_metrics)
 
     return metrics
