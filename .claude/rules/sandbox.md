@@ -5,6 +5,24 @@
 - No network access — all weights must be bundled in .zip
 - Sandboxed Docker container
 
+## Banned Imports (submitted code MUST NOT use these)
+os, sys, subprocess, socket, ctypes, builtins, importlib,
+pickle, marshal, shelve, shutil, yaml,
+requests, urllib, http.client,
+multiprocessing, threading, signal, gc,
+code, codeop, pty
+
+## Banned Callables
+eval, exec, compile, __import__, getattr
+
+## Additional Restrictions
+- No ELF/Mach-O/PE binaries, no symlinks, no path traversal
+
+## Safe Alternatives
+- File operations: use `pathlib` (not `os`)
+- Config format: use `json` (not `yaml`)
+- No `torch.compile()` — `compile` is a banned callable
+
 ## Weight Loading
 - DINOv2: `torch.load("models/dinov2_vitb14.pth")` — NEVER `torch.hub.load()`
 - YOLO: `YOLO("models/yolo_best.pt")`

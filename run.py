@@ -15,14 +15,13 @@ import argparse
 import json
 import time
 from pathlib import Path
-from queue import Queue
-from threading import Thread
 
 import numpy as np
+from PIL import Image
 import torch
 import torch.nn.functional as F
 from torchvision.transforms import InterpolationMode
-from torchvision.transforms.functional import center_crop, normalize, resize
+from torchvision.transforms.functional import center_crop, resize
 from ultralytics import YOLO
 
 from vision_task.config import (
@@ -86,18 +85,6 @@ def load_classifier(device):
     checkpoint = torch.load(CLASSIFIER_CHECKPOINT, map_location="cpu", weights_only=True)
     model.load_state_dict(checkpoint["model_state_dict"])
     model = model.to(device).half().eval()
-
-    # torch.compile for faster ViT inference (PyTorch 2.0+)
-    try:
-        model = torch.compile(model, mode="reduce-overhead")
-        # Warmup compiled model
-        dummy = torch.randn(1, 3, CLASSIFIER_SIZE, CLASSIFIER_SIZE,
-                            device=device, dtype=torch.float16)
-        model(dummy)
-        print("  torch.compile: enabled")
-    except Exception:
-        print("  torch.compile: not available, using eager mode")
-
     return model
 
 
@@ -108,26 +95,6 @@ def load_ref_embeddings(device):
     ref_embs = data["embeddings"].to(device).half()  # [C, 768]
     ref_ids = data["category_ids"]  # [C]
     return ref_embs, ref_ids
-
-
-def prefetch_images(paths, max_ahead=3):
-    """Load images in background thread, yield (path, numpy_rgb) pairs."""
-    q = Queue(maxsize=max_ahead)
-
-    def _loader():
-        for p in paths:
-            from PIL import Image
-            img = np.array(Image.open(p).convert("RGB"))
-            q.put((p, img))
-        q.put(None)
-
-    t = Thread(target=_loader, daemon=True)
-    t.start()
-    while True:
-        item = q.get()
-        if item is None:
-            break
-        yield item
 
 
 def extract_and_transform_crops(img_tensor, boxes):
@@ -238,7 +205,8 @@ def main():
     t_crop = 0.0
     t_classify = 0.0
 
-    for img_idx, (img_path, img_np) in enumerate(prefetch_images(image_paths)):
+    for img_idx, img_path in enumerate(image_paths):
+        img_np = np.array(Image.open(img_path).convert("RGB"))
         image_id = image_id_from_filename(img_path.name)
 
         # Stage 1: Detect (FP16)
