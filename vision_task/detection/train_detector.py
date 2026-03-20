@@ -86,10 +86,11 @@ def train_sku110k(args):
         project=str(EXPERIMENTS_DIR),
         name="sku110k_pretrain",
         exist_ok=True,
-        # Augmentation (detector.md)
+        optimizer="SGD",
+        # Keep default lr0=0.01 for pretraining
         mosaic=1.0,
         mixup=0.3,
-        # Keep default lr0=0.01 for pretraining
+        plots=False,
         verbose=True,
     )
 
@@ -125,11 +126,11 @@ def train_shelf(args, base_weights):
         project=str(EXPERIMENTS_DIR),
         name="shelf_finetune",
         exist_ok=True,
-        # Lower LR for fine-tuning (detector.md)
+        optimizer="SGD",
         lr0=0.001,
-        # Augmentation (detector.md)
         mosaic=1.0,
         mixup=0.3,
+        plots=False,
         verbose=True,
     )
 
