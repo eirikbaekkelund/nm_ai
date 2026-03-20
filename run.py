@@ -75,11 +75,12 @@ def load_detector(device):
 
 def load_classifier(device):
     """Load DINOv2 embedder from fine-tuned checkpoint, FP16."""
-    assert DINOV2_WEIGHTS.exists(), f"DINOv2 weights not found: {DINOV2_WEIGHTS}"
     assert CLASSIFIER_CHECKPOINT.exists(), f"Checkpoint not found: {CLASSIFIER_CHECKPOINT}"
 
+    # weights_path=None: skip loading base DINOv2 weights since
+    # classifier_best.pt already contains the full fine-tuned backbone
     model = GroceryEmbedder(
-        weights_path=str(DINOV2_WEIGHTS),
+        weights_path=None,
         freeze_backbone=True,
     )
     checkpoint = torch.load(CLASSIFIER_CHECKPOINT, map_location="cpu", weights_only=True)

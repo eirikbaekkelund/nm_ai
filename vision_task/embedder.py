@@ -21,28 +21,37 @@ _TIMM_MODEL_NAME = "vit_base_patch14_dinov2.lvd142m"
 class GroceryEmbedder(nn.Module):
     def __init__(
         self,
-        weights_path: str = "models/dinov2_vitb14.pth",
+        weights_path: str | None = "models/dinov2_vitb14.pth",
         freeze_backbone: bool = True,
     ):
         super().__init__()
 
-        weights_file = Path(weights_path)
-        if weights_file.exists():
-            logger.info("Loading DINOv2 from local weights: %s", weights_path)
+        if weights_path is None:
+            # Architecture only — caller will load checkpoint via load_state_dict
+            logger.info("Creating DINOv2 architecture (no weights)")
             self.backbone = timm.create_model(
                 _TIMM_MODEL_NAME,
                 pretrained=False,
                 num_classes=0,
             )
-            state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
-            self.backbone.load_state_dict(state_dict, strict=True)
         else:
-            logger.info("Local weights not found at %s — downloading via timm", weights_path)
-            self.backbone = timm.create_model(
-                _TIMM_MODEL_NAME,
-                pretrained=True,
-                num_classes=0,
-            )
+            weights_file = Path(weights_path)
+            if weights_file.exists():
+                logger.info("Loading DINOv2 from local weights: %s", weights_path)
+                self.backbone = timm.create_model(
+                    _TIMM_MODEL_NAME,
+                    pretrained=False,
+                    num_classes=0,
+                )
+                state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
+                self.backbone.load_state_dict(state_dict, strict=True)
+            else:
+                logger.info("Local weights not found at %s — downloading via timm", weights_path)
+                self.backbone = timm.create_model(
+                    _TIMM_MODEL_NAME,
+                    pretrained=True,
+                    num_classes=0,
+                )
 
         if freeze_backbone:
             self.freeze_backbone()
