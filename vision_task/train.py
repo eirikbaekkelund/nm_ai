@@ -1,8 +1,10 @@
 """
-Phase 4: ArcFace linear probe — freeze DINOv2, train ArcFace head only.
+Classifier training: Phase 4 (linear probe) and Phase 5 (fine-tune).
 
-Usage:
-    python -m vision_task.train [--epochs 20] [--batch_size 128] [--lr 1e-3]
+Phase 4: python -m vision_task.train --epochs 40
+Phase 5: python -m vision_task.train --resume experiments/phase4_linear_probe/best.pt \
+             --unfreeze_blocks 2 --lr 1e-3 --backbone_lr 1e-5 --epochs 20 \
+             --save_dir experiments/phase5_finetune
 """
 
 import argparse
@@ -54,14 +56,23 @@ def _auto_num_workers() -> int:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Phase 4: ArcFace linear probe")
+    parser = argparse.ArgumentParser(description="Classifier training (Phase 4 & 5)")
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch_size", type=int, default=None, help="Auto-detected from VRAM if not set")
-    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--lr", type=float, default=1e-3, help="ArcFace head learning rate")
+    parser.add_argument("--backbone_lr", type=float, default=1e-5, help="Backbone learning rate (Phase 5)")
     parser.add_argument("--val_every", type=int, default=2)
     parser.add_argument("--save_dir", type=str, default="experiments/phase4_linear_probe")
     parser.add_argument("--num_workers", type=int, default=None, help="Auto-detected from OS/cores if not set")
     parser.add_argument("--weights_path", type=str, default="models/dinov2_vitb14.pth")
+    parser.add_argument(
+        "--resume", type=str, default=None,
+        help="Resume from checkpoint (loads model + ArcFace weights, fresh optimizer)",
+    )
+    parser.add_argument(
+        "--unfreeze_blocks", type=int, default=0,
+        help="Number of backbone blocks to unfreeze (0=frozen/Phase4, 2=Phase5a, 4=Phase5b)",
+    )
     args = parser.parse_args()
     if args.batch_size is None:
         args.batch_size = _auto_batch_size()
@@ -86,7 +97,7 @@ def main():
             logging.FileHandler(log_file, mode="w", encoding="utf-8"),
         ],
     )
-    # JSON metrics log — one line per event, easy to parse
+    # JSON metrics log
     metrics_file = save_dir / "metrics.jsonl"
     metrics_fh = open(metrics_file, "w", encoding="utf-8")
 
@@ -96,7 +107,10 @@ def main():
         logger.info("Device: %s (%s, %.1f GB)", device, torch.cuda.get_device_name(0), vram_gb)
     else:
         logger.info("Device: %s", device)
-    logger.info("Config: batch_size=%d, num_workers=%d, lr=%.1e", args.batch_size, args.num_workers, args.lr)
+    logger.info(
+        "Config: batch_size=%d, num_workers=%d, lr=%.1e, backbone_lr=%.1e, unfreeze_blocks=%d",
+        args.batch_size, args.num_workers, args.lr, args.backbone_lr, args.unfreeze_blocks,
+    )
 
     # --- Model ---
     model = GroceryEmbedder(
@@ -104,21 +118,52 @@ def main():
         freeze_backbone=True,
     ).to(device)
 
-    n_params_total = sum(p.numel() for p in model.parameters())
-    n_params_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    logger.info("Backbone params: %d total, %d trainable (should be 0)", n_params_total, n_params_trainable)
-
     # --- Loss (trainable ArcFace head) ---
     loss_fn = create_arcface_loss(
         num_classes=NUM_CLASSES,
         embedding_dim=EMBEDDING_DIM,
     ).to(device)
 
-    n_loss_params = sum(p.numel() for p in loss_fn.parameters())
-    logger.info("ArcFace head params: %d", n_loss_params)
+    # --- Resume from checkpoint ---
+    if args.resume:
+        ckpt_path = Path(args.resume)
+        if not ckpt_path.exists():
+            raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+        logger.info("Resuming from checkpoint: %s", ckpt_path)
+        ckpt = torch.load(ckpt_path, map_location=device, weights_only=True)
+        model.load_state_dict(ckpt["model_state_dict"])
+        loss_fn.load_state_dict(ckpt["loss_fn_state_dict"])
+        if "metrics" in ckpt:
+            logger.info("Checkpoint metrics: %s", ckpt["metrics"])
+        logger.info("Loaded model + ArcFace weights from epoch %d", ckpt.get("epoch", "?"))
 
-    # --- Optimizer: only ArcFace W matrix ---
-    optimizer = torch.optim.AdamW(loss_fn.parameters(), lr=args.lr, weight_decay=1e-4)
+    # --- Unfreeze backbone blocks (Phase 5) ---
+    if args.unfreeze_blocks > 0:
+        model.unfreeze_last_n_blocks(args.unfreeze_blocks)
+        logger.info("Unfroze last %d backbone blocks", args.unfreeze_blocks)
+
+    n_total = sum(p.numel() for p in model.parameters())
+    n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logger.info("Model params: %d total, %d trainable", n_total, n_trainable)
+    logger.info("ArcFace head params: %d", sum(p.numel() for p in loss_fn.parameters()))
+
+    # --- Optimizer: separate param groups for backbone and head ---
+    param_groups = []
+    # ArcFace head (always trained)
+    param_groups.append({"params": loss_fn.parameters(), "lr": args.lr})
+    # Backbone unfrozen params (Phase 5 only)
+    backbone_params = [p for p in model.parameters() if p.requires_grad]
+    if backbone_params:
+        param_groups.append({"params": backbone_params, "lr": args.backbone_lr})
+        logger.info(
+            "Optimizer: head lr=%.1e (%d params), backbone lr=%.1e (%d params)",
+            args.lr, sum(p.numel() for p in loss_fn.parameters()),
+            args.backbone_lr, sum(p.numel() for p in backbone_params),
+        )
+    else:
+        logger.info("Optimizer: head lr=%.1e (backbone frozen)", args.lr)
+
+    optimizer = torch.optim.AdamW(param_groups, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
     # --- Data ---
@@ -128,7 +173,6 @@ def main():
     )
     logger.info("Train batches: %d, Val batches: %d", len(train_loader), len(val_loader))
 
-    # Reference images with eval transform (for validation gallery)
     ref_val_ds = ProductReferenceDataset(
         product_images_dir="data/product_images",
         mapping_path="data/category_mapping.json",
@@ -149,12 +193,16 @@ def main():
         "epochs": args.epochs,
         "batch_size": args.batch_size,
         "lr": args.lr,
+        "backbone_lr": args.backbone_lr,
+        "unfreeze_blocks": args.unfreeze_blocks,
+        "resume": args.resume,
         "num_workers": args.num_workers,
         "val_every": args.val_every,
         "train_batches": len(train_loader),
         "val_batches": len(val_loader),
         "n_ref_images": len(ref_val_ds),
         "n_ref_products": len(set(ref_val_ds.labels)),
+        "n_model_trainable": n_trainable,
         "device": str(device),
         "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else "cpu",
     }
@@ -163,10 +211,11 @@ def main():
 
     # --- Training loop ---
     best_recall1 = 0.0
+    best_w_acc = 0.0
     use_amp = device.type == "cuda"
 
     for epoch in range(args.epochs):
-        model.train()  # frozen backbone stays in eval via override
+        model.train()
         loss_fn.train()
 
         if hasattr(train_loader.sampler, "set_epoch"):
@@ -206,23 +255,16 @@ def main():
         lr_now = scheduler.get_last_lr()[0]
         logger.info(
             "Epoch %d/%d — loss: %.4f, lr: %.2e, time: %.1fs",
-            epoch + 1,
-            args.epochs,
-            avg_loss,
-            lr_now,
-            elapsed,
+            epoch + 1, args.epochs, avg_loss, lr_now, elapsed,
         )
         metrics_fh.write(
-            json.dumps(
-                {
-                    "event": "epoch",
-                    "epoch": epoch + 1,
-                    "train_loss": round(avg_loss, 4),
-                    "lr": lr_now,
-                    "time_s": round(elapsed, 1),
-                }
-            )
-            + "\n"
+            json.dumps({
+                "event": "epoch",
+                "epoch": epoch + 1,
+                "train_loss": round(avg_loss, 4),
+                "lr": lr_now,
+                "time_s": round(elapsed, 1),
+            }) + "\n"
         )
         metrics_fh.flush()
 
@@ -233,38 +275,49 @@ def main():
             w_top5 = metrics.get("w_acc_top5", 0)
             logger.info(
                 "  Val: R@1=%.4f R@5=%.4f | W_acc@1=%.4f W_acc@5=%.4f (n_val=%d, n_ref=%d)",
-                metrics["recall@1"],
-                metrics["recall@5"],
-                w_top1,
-                w_top5,
-                metrics["n_val"],
-                metrics["n_ref_categories"],
+                metrics["recall@1"], metrics["recall@5"],
+                w_top1, w_top5,
+                metrics["n_val"], metrics["n_ref_categories"],
             )
             metrics_fh.write(
-                json.dumps(
-                    {
-                        "event": "val",
-                        "epoch": epoch + 1,
-                        **{k: round(v, 4) if isinstance(v, float) else v for k, v in metrics.items()},
-                    }
-                )
-                + "\n"
+                json.dumps({
+                    "event": "val",
+                    "epoch": epoch + 1,
+                    **{k: round(v, 4) if isinstance(v, float) else v for k, v in metrics.items()},
+                }) + "\n"
             )
             metrics_fh.flush()
 
-            # Save best checkpoint
-            if metrics["recall@1"] > best_recall1:
-                best_recall1 = metrics["recall@1"]
+            # Save best checkpoint — track both metrics, prefer gallery recall when unfreezing
+            is_best = False
+            if args.unfreeze_blocks > 0:
+                # Phase 5: gallery recall is the real metric (it moves now)
+                if metrics["recall@1"] > best_recall1:
+                    best_recall1 = metrics["recall@1"]
+                    is_best = True
+            else:
+                # Phase 4: gallery recall is frozen, track W_acc instead
+                if w_top1 > best_w_acc:
+                    best_w_acc = w_top1
+                    is_best = True
+                if metrics["recall@1"] > best_recall1:
+                    best_recall1 = metrics["recall@1"]
+
+            if is_best:
                 checkpoint = {
                     "epoch": epoch + 1,
                     "model_state_dict": model.state_dict(),
                     "loss_fn_state_dict": loss_fn.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
                     "metrics": metrics,
+                    "unfreeze_blocks": args.unfreeze_blocks,
                 }
                 best_path = save_dir / "best.pt"
                 torch.save(checkpoint, best_path)
-                logger.info("  Saved best checkpoint: R@1=%.4f -> %s", best_recall1, best_path)
+                logger.info(
+                    "  Saved best: R@1=%.4f W_acc@1=%.4f -> %s",
+                    metrics["recall@1"], w_top1, best_path,
+                )
 
     # Save final checkpoint
     final_checkpoint = {
@@ -273,18 +326,17 @@ def main():
         "loss_fn_state_dict": loss_fn.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
         "metrics": {"final_train_loss": avg_loss},
+        "unfreeze_blocks": args.unfreeze_blocks,
     }
     torch.save(final_checkpoint, save_dir / "final.pt")
-    logger.info("Training complete. Best R@1: %.4f", best_recall1)
+    logger.info("Training complete. Best R@1: %.4f, Best W_acc@1: %.4f", best_recall1, best_w_acc)
     metrics_fh.write(
-        json.dumps(
-            {
-                "event": "done",
-                "best_recall1": round(best_recall1, 4),
-                "final_train_loss": round(avg_loss, 4),
-            }
-        )
-        + "\n"
+        json.dumps({
+            "event": "done",
+            "best_recall1": round(best_recall1, 4),
+            "best_w_acc1": round(best_w_acc, 4),
+            "final_train_loss": round(avg_loss, 4),
+        }) + "\n"
     )
     metrics_fh.close()
 
