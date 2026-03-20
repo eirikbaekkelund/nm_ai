@@ -13,14 +13,15 @@ Output: COCO-format predictions JSON:
 
 import argparse
 import json
-import sys
 import time
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
+from torchvision.transforms.functional import resize, center_crop, normalize, to_tensor
 from ultralytics import YOLO
 
 from vision_task.config import (
@@ -41,7 +42,7 @@ REF_EMBEDDINGS = ROOT / "models" / "ref_embeddings.pt"
 
 # --- Thresholds (tune in Phase 8) ---
 DETECT_CONF = 0.25  # Low to maximize recall (70% of score)
-CLASSIFY_BATCH = 64
+CLASSIFY_BATCH = 128  # H100 can handle more; L4 can do 64 easily at 518
 UNKNOWN_CATEGORY_ID = 355  # category for unknown_product
 UNKNOWN_THRESHOLD = 0.0  # cosine sim below this → unknown (disabled by default)
 
@@ -57,15 +58,18 @@ def parse_args():
     return p.parse_args()
 
 
-def load_detector():
-    """Load YOLO11x detector."""
+def load_detector(device):
+    """Load YOLO11x detector and warm up."""
     assert YOLO_WEIGHTS.exists(), f"YOLO weights not found: {YOLO_WEIGHTS}"
     model = YOLO(str(YOLO_WEIGHTS))
+    # Warmup: run a dummy image to trigger CUDA kernel compilation
+    dummy = np.zeros((640, 640, 3), dtype=np.uint8)
+    model(dummy, imgsz=DETECTOR_IMGSZ, conf=DETECT_CONF, device=device, verbose=False)
     return model
 
 
 def load_classifier(device):
-    """Load DINOv2 embedder from fine-tuned checkpoint."""
+    """Load DINOv2 embedder from fine-tuned checkpoint, in half precision."""
     assert DINOV2_WEIGHTS.exists(), f"DINOv2 weights not found: {DINOV2_WEIGHTS}"
     assert CLASSIFIER_CHECKPOINT.exists(), f"Classifier checkpoint not found: {CLASSIFIER_CHECKPOINT}"
 
@@ -75,7 +79,7 @@ def load_classifier(device):
     )
     checkpoint = torch.load(CLASSIFIER_CHECKPOINT, map_location="cpu", weights_only=True)
     model.load_state_dict(checkpoint["model_state_dict"])
-    model = model.to(device)
+    model = model.to(device).half()  # FP16 — no accuracy loss for inference
     model.eval()
     return model
 
@@ -84,72 +88,70 @@ def load_ref_embeddings(device):
     """Load pre-computed reference embeddings."""
     assert REF_EMBEDDINGS.exists(), f"Ref embeddings not found: {REF_EMBEDDINGS}"
     data = torch.load(REF_EMBEDDINGS, map_location=device, weights_only=True)
-    ref_embs = data["embeddings"].to(device)  # [C, 768] L2-normalized
+    ref_embs = data["embeddings"].to(device).half()  # [C, 768] L2-normalized, FP16
     ref_ids = data["category_ids"]  # [C] int64
     return ref_embs, ref_ids
 
 
-def get_eval_transform():
-    """Eval transform: Resize(546) → CenterCrop(518) → Normalize."""
-    return transforms.Compose([
-        transforms.Resize(CLASSIFIER_RESIZE, interpolation=transforms.InterpolationMode.BICUBIC),
-        transforms.CenterCrop(CLASSIFIER_SIZE),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD),
-    ])
-
-
-def extract_crops(image, boxes):
-    """Crop detected regions from PIL image.
+def extract_and_transform_crops(image, boxes):
+    """Crop detected regions and apply eval transform, return stacked tensor.
 
     Args:
-        image: PIL Image
+        image: PIL Image (RGB)
         boxes: tensor [N, 4] in xyxy format (pixels)
 
     Returns:
-        list of PIL Image crops
+        tensor [M, 3, 518, 518] (FP16), valid_indices list
     """
     w, h = image.size
-    crops = []
-    for box in boxes:
+    tensors = []
+    valid_indices = []
+
+    for i, box in enumerate(boxes):
         x1, y1, x2, y2 = box.tolist()
-        # Clamp to image bounds
-        x1 = max(0, int(x1))
-        y1 = max(0, int(y1))
-        x2 = min(w, int(x2))
-        y2 = min(h, int(y2))
+        x1, y1 = max(0, int(x1)), max(0, int(y1))
+        x2, y2 = min(w, int(x2)), min(h, int(y2))
         if x2 <= x1 or y2 <= y1:
             continue
-        crops.append(image.crop((x1, y1, x2, y2)))
-    return crops
+
+        crop = image.crop((x1, y1, x2, y2))
+        t = to_tensor(crop)
+        t = resize(t, [CLASSIFIER_RESIZE], interpolation=transforms.InterpolationMode.BICUBIC, antialias=True)
+        t = center_crop(t, [CLASSIFIER_SIZE, CLASSIFIER_SIZE])
+        t = normalize(t, mean=IMAGENET_MEAN, std=IMAGENET_STD)
+        tensors.append(t)
+        valid_indices.append(i)
+
+    if not tensors:
+        return None, []
+
+    return torch.stack(tensors).half(), valid_indices
 
 
 @torch.no_grad()
-def classify_crops(crops, model, transform, ref_embs, ref_ids, device):
-    """Classify a list of PIL image crops via cosine similarity.
+def classify_batch(crop_tensors, model, ref_embs, ref_ids, device):
+    """Classify pre-transformed crop tensors via cosine similarity.
+
+    Args:
+        crop_tensors: [N, 3, 518, 518] FP16 tensor
+        model: DINOv2 embedder (FP16)
 
     Returns:
-        category_ids: list[int]
-        scores: list[float] (cosine similarity to best match)
+        category_ids: list[int], cos_scores: list[float]
     """
-    if not crops:
-        return [], []
-
     category_ids = []
     cos_scores = []
+    n = crop_tensors.shape[0]
 
-    for i in range(0, len(crops), CLASSIFY_BATCH):
-        batch_crops = crops[i:i + CLASSIFY_BATCH]
-        tensors = torch.stack([transform(c) for c in batch_crops]).to(device)
+    for i in range(0, n, CLASSIFY_BATCH):
+        batch = crop_tensors[i:i + CLASSIFY_BATCH].to(device)
+        embs = model(batch)  # [B, 768] FP16
+        embs = F.normalize(embs.float(), dim=1).half()
 
-        embs = model(tensors)  # [B, 768]
-        embs = F.normalize(embs.float(), dim=1)
-
-        # Cosine similarity: [B, C]
-        sim = embs @ ref_embs.T
+        sim = embs @ ref_embs.T  # [B, C]
         best_scores, best_indices = sim.max(dim=1)
 
-        for j in range(len(batch_crops)):
+        for j in range(batch.shape[0]):
             score = best_scores[j].item()
             if score < UNKNOWN_THRESHOLD:
                 category_ids.append(UNKNOWN_CATEGORY_ID)
@@ -174,11 +176,10 @@ def main():
 
     # --- Load models ---
     t0 = time.time()
-    detector = load_detector()
+    detector = load_detector(device)
     classifier = load_classifier(device)
     ref_embs, ref_ids = load_ref_embeddings(device)
-    transform = get_eval_transform()
-    print(f"Models loaded in {time.time() - t0:.1f}s")
+    print(f"Models loaded + warmed up in {time.time() - t0:.1f}s")
     print(f"  Ref embeddings: {ref_embs.shape} ({len(ref_ids)} categories)")
 
     if torch.cuda.is_available():
@@ -199,10 +200,11 @@ def main():
     for img_idx, img_path in enumerate(image_paths):
         image = Image.open(img_path).convert("RGB")
         image_id = image_id_from_filename(img_path.name)
+        img_np = np.array(image)
 
-        # Stage 1: Detect
+        # Stage 1: Detect (pass numpy array — avoids re-reading from disk)
         results = detector(
-            img_path,
+            img_np,
             imgsz=DETECTOR_IMGSZ,
             conf=args.detect_conf,
             device=device,
@@ -216,18 +218,18 @@ def main():
         xyxy = boxes.xyxy.cpu()  # [N, 4]
         det_scores = boxes.conf.cpu()  # [N]
 
-        # Stage 2: Crop & Classify
-        crops = extract_crops(image, xyxy)
-        if not crops:
+        # Stage 2: Crop, transform, classify
+        crop_tensors, valid_indices = extract_and_transform_crops(image, xyxy)
+        if crop_tensors is None:
             continue
 
-        cat_ids, cos_scores = classify_crops(
-            crops, classifier, transform, ref_embs, ref_ids, device
+        cat_ids, cos_scores = classify_batch(
+            crop_tensors, classifier, ref_embs, ref_ids, device
         )
 
         # Build COCO predictions
-        for j in range(len(crops)):
-            x1, y1, x2, y2 = xyxy[j].tolist()
+        for j, vi in enumerate(valid_indices):
+            x1, y1, x2, y2 = xyxy[vi].tolist()
             predictions.append({
                 "image_id": image_id,
                 "category_id": cat_ids[j],
@@ -237,20 +239,20 @@ def main():
                     round(x2 - x1, 2),
                     round(y2 - y1, 2),
                 ],
-                "score": round(float(det_scores[j]) * cos_scores[j], 4),
+                "score": round(float(det_scores[vi]) * cos_scores[j], 4),
             })
 
         if (img_idx + 1) % 10 == 0 or img_idx == 0:
             elapsed = time.time() - t_start
+            rate = (img_idx + 1) / elapsed
             print(f"  [{img_idx + 1}/{len(image_paths)}] "
-                  f"{len(boxes)} detections, {elapsed:.1f}s elapsed")
+                  f"{len(boxes)} dets, {elapsed:.1f}s, {rate:.1f} img/s")
 
-    # --- Free VRAM between stages if needed ---
+    # --- Summary ---
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         print(f"Peak VRAM: {torch.cuda.max_memory_allocated() / 1e9:.1f} GB")
 
-    # --- Save ---
     output_path = Path(args.output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
@@ -259,8 +261,7 @@ def main():
     total_time = time.time() - t_start
     print(f"\nDone! {len(predictions)} predictions from {len(image_paths)} images")
     print(f"Saved to: {output_path}")
-    print(f"Total inference time: {total_time:.1f}s "
-          f"({total_time / max(len(image_paths), 1):.2f}s/image)")
+    print(f"Total: {total_time:.1f}s ({total_time / max(len(image_paths), 1):.2f}s/image)")
 
 
 if __name__ == "__main__":
