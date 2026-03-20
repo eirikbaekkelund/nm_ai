@@ -1,0 +1,1782 @@
+[
+  {
+    "category_id": 0,
+    "name": "FRØKRISP KNEKKEBRØD ØKOLOGISK 170G BERIT",
+    "annotation_count": 85
+  },
+  {
+    "category_id": 1,
+    "name": "COFFEE MATE 180G  NESTLE",
+    "annotation_count": 59
+  },
+  {
+    "category_id": 2,
+    "name": "FROKOSTRINGER FRUKTSMAK 350G ELDORADO",
+    "annotation_count": 6
+  },
+  {
+    "category_id": 3,
+    "name": "KNEKKEBRØD DIN STUND CHIA&HAVSALT 260G",
+    "annotation_count": 178
+  },
+  {
+    "category_id": 4,
+    "name": "Økologiske Egg 6stk",
+    "annotation_count": 10
+  },
+  {
+    "category_id": 5,
+    "name": "GRISSINI HVITLØK 125G GRANFORNO",
+    "annotation_count": 45
+  },
+  {
+    "category_id": 6,
+    "name": "Eldorado Økologiske Gårdsegg",
+    "annotation_count": 46
+  },
+  {
+    "category_id": 7,
+    "name": "PUFFET HAVRE 340G FIRST PRICE",
+    "annotation_count": 106
+  },
+  {
+    "category_id": 8,
+    "name": "FLATBRØD MORS",
+    "annotation_count": 68
+  },
+  {
+    "category_id": 9,
+    "name": "ESPRESSO INTENSO 16KAPSLER DOLCE GUSTO",
+    "annotation_count": 6
+  },
+  {
+    "category_id": 10,
+    "name": "Jacobs 10 Gårdsegg",
+    "annotation_count": 12
+  },
+  {
+    "category_id": 11,
+    "name": "GRISSINI M/OLIVENOLJE 200G JACOBS UTVALG",
+    "annotation_count": 58
+  },
+  {
+    "category_id": 12,
+    "name": "Leksands Rutbit",
+    "annotation_count": 150
+  },
+  {
+    "category_id": 13,
+    "name": "GRISSINI 125G GRANFORNO",
+    "annotation_count": 13
+  },
+  {
+    "category_id": 14,
+    "name": "GRANOLA NØTTER 375G JACOBS UTVALGTE",
+    "annotation_count": 48
+  },
+  {
+    "category_id": 15,
+    "name": "FRUKT MÜSLI 1KG FIRST PRICE",
+    "annotation_count": 105
+  },
+  {
+    "category_id": 16,
+    "name": "CAPPUCCINO 8KAPSLER DOLCE GUSTO",
+    "annotation_count": 6
+  },
+  {
+    "category_id": 17,
+    "name": "KNEKKEBRØD GL.FRI 150G BRISK",
+    "annotation_count": 4
+  },
+  {
+    "category_id": 18,
+    "name": "MELANGE MARGARIN U/MELK/SALT/SOYA 500G",
+    "annotation_count": 13
+  },
+  {
+    "category_id": 19,
+    "name": "MOLLBERGS ZOEGAS 16KAPSLER DOLCE GUSTO",
+    "annotation_count": 20
+  },
+  {
+    "category_id": 20,
+    "name": "GRØNN TE 20POS LIPTON",
+    "annotation_count": 20
+  },
+  {
+    "category_id": 21,
+    "name": "KNEKKEBRØD RUNDA SESAM&HAVSALT 290G WASA",
+    "annotation_count": 271
+  },
+  {
+    "category_id": 22,
+    "name": "MÜSLI RISTET HAVRE&TRANEBÆR 700G AXA",
+    "annotation_count": 18
+  },
+  {
+    "category_id": 23,
+    "name": "FITNESS FROKOST 375G NESTLE",
+    "annotation_count": 113
+  },
+  {
+    "category_id": 24,
+    "name": "GRØNN MINT TE 20POS LIPTON",
+    "annotation_count": 38
+  },
+  {
+    "category_id": 25,
+    "name": "ALI MØRKBRENT KAFFEKAPSEL 16STK",
+    "annotation_count": 33
+  },
+  {
+    "category_id": 26,
+    "name": "OB PROCOMFORT NORMAL 16ST",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 27,
+    "name": "YELLOW LABEL TEA 50POS LIPTON",
+    "annotation_count": 34
+  },
+  {
+    "category_id": 28,
+    "name": "LADY GREY TE 200G TWININGS",
+    "annotation_count": 6
+  },
+  {
+    "category_id": 29,
+    "name": "NESQUIK FROKOSTBLANDING 375G NESTLE",
+    "annotation_count": 192
+  },
+  {
+    "category_id": 30,
+    "name": "SJOKORINGER 375G ELDORADO",
+    "annotation_count": 129
+  },
+  {
+    "category_id": 31,
+    "name": "TASSIMO EVERGOOD DARK ROAST 16KAPSLER",
+    "annotation_count": 17
+  },
+  {
+    "category_id": 32,
+    "name": "SOLBÆRTODDY 10PK 320G FREIA",
+    "annotation_count": 67
+  },
+  {
+    "category_id": 33,
+    "name": "FLATBRØD MORS HJEMMEBAKTE 520G",
+    "annotation_count": 161
+  },
+  {
+    "category_id": 34,
+    "name": "SMACKS 330G KELLOGG'S",
+    "annotation_count": 181
+  },
+  {
+    "category_id": 35,
+    "name": "CRUNCHY MUSLI 750G FIRST PRICE",
+    "annotation_count": 108
+  },
+  {
+    "category_id": 36,
+    "name": "MÜSLI FRUKT MÜSLI 700G AXA",
+    "annotation_count": 14
+  },
+  {
+    "category_id": 37,
+    "name": "URTETE 200G RICOLA",
+    "annotation_count": 29
+  },
+  {
+    "category_id": 38,
+    "name": "KNEKKEBRØD DIN STUND CHIA&HAVSALT 270G W",
+    "annotation_count": 265
+  },
+  {
+    "category_id": 39,
+    "name": "KNEKKEBRØD RUNDA KANEL 330G WASA",
+    "annotation_count": 120
+  },
+  {
+    "category_id": 40,
+    "name": "FRIELE FROKOST FILTERMALT 250G",
+    "annotation_count": 95
+  },
+  {
+    "category_id": 41,
+    "name": "VITA HJERTEGO MYK PLANTEMARGARIN 370G",
+    "annotation_count": 11
+  },
+  {
+    "category_id": 42,
+    "name": "KNEKKS KJEKS M/SPELT&HAVSALT 190G RØROS",
+    "annotation_count": 22
+  },
+  {
+    "category_id": 43,
+    "name": "MEIERISMØR 500G TINE",
+    "annotation_count": 25
+  },
+  {
+    "category_id": 44,
+    "name": "KNEKKS KJEKS HAVRE 190G RØROS",
+    "annotation_count": 2
+  },
+  {
+    "category_id": 45,
+    "name": "LADY GREY TEA 25POS TWININGS",
+    "annotation_count": 43
+  },
+  {
+    "category_id": 46,
+    "name": "GRØNN TE SITRON 25POS TWININGS",
+    "annotation_count": 108
+  },
+  {
+    "category_id": 47,
+    "name": "GRANOLA EPLE&KANEL 430G BARE BRA",
+    "annotation_count": 88
+  },
+  {
+    "category_id": 48,
+    "name": "SMØREMYK 600G ELDORADO",
+    "annotation_count": 8
+  },
+  {
+    "category_id": 49,
+    "name": "EVERGOOD DARK ROAST FILTERMALT 250G",
+    "annotation_count": 92
+  },
+  {
+    "category_id": 50,
+    "name": "BERIT GRANOLA M/PUFFET HAVRE 350G",
+    "annotation_count": 123
+  },
+  {
+    "category_id": 51,
+    "name": "Tørresvik Gårdsegg 6stk",
+    "annotation_count": 5
+  },
+  {
+    "category_id": 52,
+    "name": "RUGSPRØ 200G WASA",
+    "annotation_count": 227
+  },
+  {
+    "category_id": 53,
+    "name": "COCO POPS CHOCOS 330G KELLOGG'S",
+    "annotation_count": 157
+  },
+  {
+    "category_id": 54,
+    "name": "FILTERPOSER NR.4 100STK EVERGOOD",
+    "annotation_count": 10
+  },
+  {
+    "category_id": 55,
+    "name": "COTW LUNGO KOFFEINFRI KAFFEKAPSEL 10STK",
+    "annotation_count": 5
+  },
+  {
+    "category_id": 56,
+    "name": "SJOKOLADEDRIKK 10PK 320G REGIA",
+    "annotation_count": 101
+  },
+  {
+    "category_id": 57,
+    "name": "MORENEPOTETER GULE 650G BJERTNÆS&HOEL",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 58,
+    "name": "COTW LUNGO ØKOLOGISK KAFFEKAPSEL 10STK",
+    "annotation_count": 6
+  },
+  {
+    "category_id": 59,
+    "name": "MÜSLI BLÅBÆR 630G AXA",
+    "annotation_count": 8
+  },
+  {
+    "category_id": 60,
+    "name": "KNEKKEBRØD URTER&HAVSALT GL.FRI 190G",
+    "annotation_count": 2
+  },
+  {
+    "category_id": 61,
+    "name": "MUSLI BLÅBÆR 630G AXA",
+    "annotation_count": 144
+  },
+  {
+    "category_id": 62,
+    "name": "KAVRINGER 350G WASA",
+    "annotation_count": 134
+  },
+  {
+    "category_id": 63,
+    "name": "ALI MØRKBRENT FILTERMALT 250G",
+    "annotation_count": 101
+  },
+  {
+    "category_id": 64,
+    "name": "TASSIMO EVERGOOD CLASSIC 16KAPSLER",
+    "annotation_count": 35
+  },
+  {
+    "category_id": 65,
+    "name": "PULVERKAFFE INSTANT 200G FIRST PRICE",
+    "annotation_count": 27
+  },
+  {
+    "category_id": 66,
+    "name": "RYVITA KNEKKEBRØD SESAM 250G",
+    "annotation_count": 121
+  },
+  {
+    "category_id": 67,
+    "name": "SOFT FLORA ORIGINAL 230G",
+    "annotation_count": 8
+  },
+  {
+    "category_id": 68,
+    "name": "MAISKAKER SOURCREAM&ONION 125G FRIGGS",
+    "annotation_count": 76
+  },
+  {
+    "category_id": 69,
+    "name": "DAVE&JON'S DADLER SOUR COLA 125G",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 70,
+    "name": "BRUSCHETTE TOMAT&OLIVEN 150G MARETTI",
+    "annotation_count": 15
+  },
+  {
+    "category_id": 71,
+    "name": "AMERICANO 16 KAPSLER DOLCE GUSTO",
+    "annotation_count": 28
+  },
+  {
+    "category_id": 72,
+    "name": "EGG FRITTGÅENDE 12STK PRIOR",
+    "annotation_count": 84
+  },
+  {
+    "category_id": 73,
+    "name": "MELLOMBAR SJOKOLADE&KRISP 138G ELDORADO",
+    "annotation_count": 178
+  },
+  {
+    "category_id": 74,
+    "name": "NESCAFE BRASERO REFILL 180G",
+    "annotation_count": 5
+  },
+  {
+    "category_id": 75,
+    "name": "CRUESLI 4 NUTS 450G QUAKER",
+    "annotation_count": 139
+  },
+  {
+    "category_id": 76,
+    "name": "BRUSCHETTA LIGURISK 130G OLIVINO",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 77,
+    "name": "BAKEKAKAO 250G REGIA",
+    "annotation_count": 4
+  },
+  {
+    "category_id": 78,
+    "name": "MUSLI HAVRE&MANDEL 400G BARE BRA",
+    "annotation_count": 101
+  },
+  {
+    "category_id": 79,
+    "name": "PANNEKAKER GROVE STEKTE 480G ÅMLI",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 80,
+    "name": "FROKOSTEGG FRITTGÅENDE L 12STK PRIOR",
+    "annotation_count": 243
+  },
+  {
+    "category_id": 81,
+    "name": "GRØNN TE CHAI 25POS TWININGS",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 82,
+    "name": "FRØ & HAVSALT 200G LEKSANDS",
+    "annotation_count": 205
+  },
+  {
+    "category_id": 83,
+    "name": "BLACK TEA PEACG&MANGO 20PS LIPTON",
+    "annotation_count": 33
+  },
+  {
+    "category_id": 84,
+    "name": "HAVRE KNEKKEBRØD ØKONOMI 600G WASA",
+    "annotation_count": 109
+  },
+  {
+    "category_id": 85,
+    "name": "RIS PUFFET 260G FIRST PRICE",
+    "annotation_count": 139
+  },
+  {
+    "category_id": 86,
+    "name": "HAVRE KNEKKEBRØD 300G WASA",
+    "annotation_count": 398
+  },
+  {
+    "category_id": 87,
+    "name": "SPICY INDIAN CHAI TEA 20POS TWININGS",
+    "annotation_count": 68
+  },
+  {
+    "category_id": 88,
+    "name": "OLIVERO SMØR&OLIVENOLJE 400G",
+    "annotation_count": 15
+  },
+  {
+    "category_id": 89,
+    "name": "FOREST FRUIT TEA 20POS LIPTON",
+    "annotation_count": 76
+  },
+  {
+    "category_id": 90,
+    "name": "GRANOLA PEKAN GL.FRI 325G SYNNØVE FINDEN",
+    "annotation_count": 2
+  },
+  {
+    "category_id": 91,
+    "name": "SANDWICH PESTO 37G WASA",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 92,
+    "name": "KNEKKEBRØD GODT FOR DEG 235G SIGDAL",
+    "annotation_count": 247
+  },
+  {
+    "category_id": 93,
+    "name": "GRANOLA KAKAO KOKOS&MANDEL BARE BRA",
+    "annotation_count": 23
+  },
+  {
+    "category_id": 94,
+    "name": "HAVREGRYN STORE GLUTENFRI 1KG AXA",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 95,
+    "name": "EGG M/L ØKOLOGISKE 10STK VILJE",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 96,
+    "name": "FLATBRØD 275G KORNI",
+    "annotation_count": 247
+  },
+  {
+    "category_id": 97,
+    "name": "CHEERIOS MULTI 375G NESTLE",
+    "annotation_count": 190
+  },
+  {
+    "category_id": 98,
+    "name": "NIGHT TE 20POS PUKKA",
+    "annotation_count": 7
+  },
+  {
+    "category_id": 99,
+    "name": "NESCAFE ORIGINAL 180G REFILL",
+    "annotation_count": 14
+  },
+  {
+    "category_id": 100,
+    "name": "EVERGOOD CLASSIC FILTERMALT 250G",
+    "annotation_count": 368
+  },
+  {
+    "category_id": 101,
+    "name": "SANDWICH CHEESE HERBS 30G WASA",
+    "annotation_count": 13
+  },
+  {
+    "category_id": 102,
+    "name": "EGG FRITTGÅENDE M/L/XL SOLEGG 12STK PRIO",
+    "annotation_count": 50
+  },
+  {
+    "category_id": 103,
+    "name": "EVERGOOD DARK ROAST KAFFEKAPSEL 10STK KA",
+    "annotation_count": 56
+  },
+  {
+    "category_id": 104,
+    "name": "SMØR USALTET 250G TINE",
+    "annotation_count": 3
+  },
+  {
+    "category_id": 105,
+    "name": "EGG ØKOLOGISK M/L 12STK VINGULMARK",
+    "annotation_count": 15
+  },
+  {
+    "category_id": 106,
+    "name": "NESCAFE GOLD KOFFEINFRI 100G",
+    "annotation_count": 34
+  },
+  {
+    "category_id": 107,
+    "name": "FLAT WHITE 16KAPSLER DOLCE GUSTO",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 108,
+    "name": "MUSLI M/BELGISK SJOKOLADE DSH",
+    "annotation_count": 103
+  },
+  {
+    "category_id": 109,
+    "name": "KNEKKEBRØD 100 FRØ&HAVSALT 245G WASA",
+    "annotation_count": 374
+  },
+  {
+    "category_id": 110,
+    "name": "BREMYKT 250G",
+    "annotation_count": 12
+  },
+  {
+    "category_id": 111,
+    "name": "NESCAFE BRASERO 100G",
+    "annotation_count": 91
+  },
+  {
+    "category_id": 112,
+    "name": "ESPRESSO ITALIAN HELE BØNNER 500G JACOBS",
+    "annotation_count": 5
+  },
+  {
+    "category_id": 113,
+    "name": "ERTERFLATBRØD CRISP 210G",
+    "annotation_count": 15
+  },
+  {
+    "category_id": 114,
+    "name": "CLEAN MATCHA GREEN TE ØKOL 20POS PUKKA",
+    "annotation_count": 3
+  },
+  {
+    "category_id": 115,
+    "name": "EXCELSO COLOMBIA HELE BØNNER 500G JACOBS",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 116,
+    "name": "FROKOSTBLANDING LION 350G NESTLE",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 117,
+    "name": "GRANOLA HASSELNØTT&KOKOS 450G BARE BRA",
+    "annotation_count": 115
+  },
+  {
+    "category_id": 118,
+    "name": "BLÅ JAVA HELE BØNNER 500G JACOBS UTVALGT",
+    "annotation_count": 11
+  },
+  {
+    "category_id": 119,
+    "name": "SOFT FLORA STEKE&BAKE 500G",
+    "annotation_count": 3
+  },
+  {
+    "category_id": 120,
+    "name": "TOM&JERRY KJEKS 175G SÆTRE",
+    "annotation_count": 2
+  },
+  {
+    "category_id": 121,
+    "name": "FROKOST-TALL 250G ELDORADO",
+    "annotation_count": 48
+  },
+  {
+    "category_id": 122,
+    "name": "NYPETE 24POS CONFECTA",
+    "annotation_count": 62
+  },
+  {
+    "category_id": 123,
+    "name": "ASPARGES GRØNN",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 124,
+    "name": "O'BOY MINDRE SUKKER 500G POSE FREIA",
+    "annotation_count": 4
+  },
+  {
+    "category_id": 125,
+    "name": "SJOKOLADEDRIKK 512G RETT I KOPPEN",
+    "annotation_count": 5
+  },
+  {
+    "category_id": 126,
+    "name": "GRANDE INTENSO 16KAPSLER DOLCE GUSTO",
+    "annotation_count": 9
+  },
+  {
+    "category_id": 127,
+    "name": "FRIELE FROKOST HEL 500G",
+    "annotation_count": 9
+  },
+  {
+    "category_id": 128,
+    "name": "SMØREMYK LETT 400G ELDORADO",
+    "annotation_count": 20
+  },
+  {
+    "category_id": 129,
+    "name": "SVARTHAVREGRYN LETTKOKTE 900G DEN SORTE",
+    "annotation_count": 6
+  },
+  {
+    "category_id": 130,
+    "name": "WEETOS CHOCO 375G WEETABIX",
+    "annotation_count": 145
+  },
+  {
+    "category_id": 131,
+    "name": "KNEKKEBRØD HAVRE GL.FRI 190G SIGDAL",
+    "annotation_count": 22
+  },
+  {
+    "category_id": 132,
+    "name": "FRUKOST FULLKORN 320G WASA",
+    "annotation_count": 300
+  },
+  {
+    "category_id": 133,
+    "name": "ZOEGAS KAFFE SKÅNEROST 450G",
+    "annotation_count": 5
+  },
+  {
+    "category_id": 134,
+    "name": "EVERGOOD ESPRESSO HELE BØNNER 500G",
+    "annotation_count": 2
+  },
+  {
+    "category_id": 135,
+    "name": "GÅRDSEGG EKSTRA STORE 6STK EK",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 136,
+    "name": "SJOKOLADEDRIKK 450G BOKS REGIA",
+    "annotation_count": 31
+  },
+  {
+    "category_id": 137,
+    "name": "NESCAFE AZERA ESPRESSO 100G",
+    "annotation_count": 54
+  },
+  {
+    "category_id": 138,
+    "name": "Økologiske Egg 10stk",
+    "annotation_count": 14
+  },
+  {
+    "category_id": 139,
+    "name": "EGG FRITTGÅENDE M/L/XL SOLEGG 6STK PRIOR",
+    "annotation_count": 135
+  },
+  {
+    "category_id": 140,
+    "name": "SURDEIGKJEKS 100G SÆTRES BESTE",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 141,
+    "name": "EVERGOOD CLASSIC PRESSMALT 250G",
+    "annotation_count": 63
+  },
+  {
+    "category_id": 142,
+    "name": "NESCAFÉ CAPPUCCINO 100G NESTLE",
+    "annotation_count": 61
+  },
+  {
+    "category_id": 143,
+    "name": "KORNMO KNEKKEBRØD HAVRE&SOLSIKKE 200G",
+    "annotation_count": 129
+  },
+  {
+    "category_id": 144,
+    "name": "FRIELE FROKOST KOKMALT 250G",
+    "annotation_count": 19
+  },
+  {
+    "category_id": 145,
+    "name": "GRANOLA MANDLER &QUINOA 475G ELDORADO",
+    "annotation_count": 69
+  },
+  {
+    "category_id": 146,
+    "name": "NESCAFE GULL 200G NESTLE",
+    "annotation_count": 54
+  },
+  {
+    "category_id": 147,
+    "name": "ROOIBOS TE ØKOLOGISK 20PS",
+    "annotation_count": 4
+  },
+  {
+    "category_id": 148,
+    "name": "GRANOLA SJOKOLADE&NØTTER 375G JACOBS",
+    "annotation_count": 28
+  },
+  {
+    "category_id": 149,
+    "name": "KNEKKEBRØD SESAM&HAVSALT GL.FRI 240G",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 150,
+    "name": "Sætre GullBar",
+    "annotation_count": 17
+  },
+  {
+    "category_id": 151,
+    "name": "FARMERS COFFEE FILTERMALT 250G",
+    "annotation_count": 72
+  },
+  {
+    "category_id": 152,
+    "name": "HAVREKNEKKEBRØD TYNT 265G WASA",
+    "annotation_count": 185
+  },
+  {
+    "category_id": 153,
+    "name": "FRIELE FROKOST KOFFEINFRI FILTERMALT 250G",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 154,
+    "name": "KRYDDERMIKS SHISH KEBAB 10G POS HINDU",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 155,
+    "name": "MELANGE FLYTENDE MARGARIN M/SMØR 500ML",
+    "annotation_count": 3
+  },
+  {
+    "category_id": 156,
+    "name": "GRANOLA CRAZELNUT 500G START!",
+    "annotation_count": 3
+  },
+  {
+    "category_id": 157,
+    "name": "MELLOMBAR SOMMERVIBBER 138G ELDORADO",
+    "annotation_count": 90
+  },
+  {
+    "category_id": 158,
+    "name": "SURDEIG KNEKKEBRØD WASA",
+    "annotation_count": 55
+  },
+  {
+    "category_id": 159,
+    "name": "Galåvolden Store Gårdsegg 10stk",
+    "annotation_count": 4
+  },
+  {
+    "category_id": 160,
+    "name": "ALI ORIGINAL KOKMALT 250G",
+    "annotation_count": 74
+  },
+  {
+    "category_id": 161,
+    "name": "HAVRERINGER 250G SYNNØVE FINDEN",
+    "annotation_count": 3
+  },
+  {
+    "category_id": 162,
+    "name": "TRESOR CHOCO NUT 410G KELLOGGS",
+    "annotation_count": 46
+  },
+  {
+    "category_id": 163,
+    "name": "Galåvolden Store Gårdsegg 6stk",
+    "annotation_count": 6
+  },
+  {
+    "category_id": 164,
+    "name": "GRANOLA NATURELL 475G ELDORADO",
+    "annotation_count": 121
+  },
+  {
+    "category_id": 165,
+    "name": "COTW COLOMBIA EXCELSO KAFFEKAPSEL 10STK",
+    "annotation_count": 5
+  },
+  {
+    "category_id": 166,
+    "name": "SJOKOFLAK FROKOSTBLANDING 375G ELDORADO",
+    "annotation_count": 8
+  },
+  {
+    "category_id": 167,
+    "name": "TROPISK AROMA FILTERMALT 200G JACOBS",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 168,
+    "name": "BRELETT 540G",
+    "annotation_count": 21
+  },
+  {
+    "category_id": 169,
+    "name": "SJOKOLADEDRIKK REFILL 512G RETT I KOPPEN",
+    "annotation_count": 33
+  },
+  {
+    "category_id": 170,
+    "name": "MÜSLI ENERGI 650G AXA",
+    "annotation_count": 8
+  },
+  {
+    "category_id": 171,
+    "name": "ALI ORIGINAL FILTERMALT 250G",
+    "annotation_count": 231
+  },
+  {
+    "category_id": 172,
+    "name": "FRIELE INSTANT GULL 100G REFILL",
+    "annotation_count": 2
+  },
+  {
+    "category_id": 173,
+    "name": "EARL GREY TEA 25POS TWININGS",
+    "annotation_count": 95
+  },
+  {
+    "category_id": 174,
+    "name": "EPLE&KANEL&ROSIN TE 25POS TWININGS",
+    "annotation_count": 59
+  },
+  {
+    "category_id": 175,
+    "name": "MELANGE MARGARIN 500G",
+    "annotation_count": 47
+  },
+  {
+    "category_id": 176,
+    "name": "BORDMARGARIN 400G FIRST PRICE",
+    "annotation_count": 10
+  },
+  {
+    "category_id": 177,
+    "name": "LEMON TEA GINGER 20POS PUKKA",
+    "annotation_count": 32
+  },
+  {
+    "category_id": 178,
+    "name": "NESCAFE GOLD ORGANIC&FAIRTRADE 100G",
+    "annotation_count": 73
+  },
+  {
+    "category_id": 179,
+    "name": "SJOKOLADEDRIKK 10X32G RETT I KOPPEN",
+    "annotation_count": 4
+  },
+  {
+    "category_id": 180,
+    "name": "MÜSLI PAPAYA GLUTENFRI 350G AXA",
+    "annotation_count": 2
+  },
+  {
+    "category_id": 181,
+    "name": "CHEERIOS HAVRE 375G NESTLE",
+    "annotation_count": 190
+  },
+  {
+    "category_id": 182,
+    "name": "FRIELE INSTANT 200G",
+    "annotation_count": 13
+  },
+  {
+    "category_id": 183,
+    "name": "KNEKKEBRØD GODT FOR DEG OST 190G SIGDAL",
+    "annotation_count": 5
+  },
+  {
+    "category_id": 184,
+    "name": "EARL GREY TEA 200G TWININGS",
+    "annotation_count": 36
+  },
+  {
+    "category_id": 185,
+    "name": "Eldorado Flytende Gårdsegg",
+    "annotation_count": 28
+  },
+  {
+    "category_id": 186,
+    "name": "SUPERGRØT SKOGSBÆR 57G BARE BRA",
+    "annotation_count": 126
+  },
+  {
+    "category_id": 187,
+    "name": "WEETABIX ORIGINAL FROKOSTBLANDING 430G",
+    "annotation_count": 106
+  },
+  {
+    "category_id": 188,
+    "name": "MAISKAKER POPCORN 125G FRIGGS",
+    "annotation_count": 195
+  },
+  {
+    "category_id": 189,
+    "name": "YELLOW LABEL TEA 25POS LIPTON",
+    "annotation_count": 72
+  },
+  {
+    "category_id": 190,
+    "name": "EARL GREY TEA ØKOLOGISK 15POS JACOBS",
+    "annotation_count": 2
+  },
+  {
+    "category_id": 191,
+    "name": "ALL-BRAN REGULAR 375G KELLOGG'S",
+    "annotation_count": 69
+  },
+  {
+    "category_id": 192,
+    "name": "ICE COFFEE 8POS NESCAFE",
+    "annotation_count": 39
+  },
+  {
+    "category_id": 193,
+    "name": "EGG ØKOLOGISK 6STK 375G JACOBS UTVALGTE",
+    "annotation_count": 50
+  },
+  {
+    "category_id": 194,
+    "name": "CRUESLI SOLFROKOST 450G QUAKER",
+    "annotation_count": 141
+  },
+  {
+    "category_id": 195,
+    "name": "Økologiske Egg Brune 6stk",
+    "annotation_count": 10
+  },
+  {
+    "category_id": 196,
+    "name": "COTW LUNGO KAFFEKAPSEL 10STK",
+    "annotation_count": 30
+  },
+  {
+    "category_id": 197,
+    "name": "SPECIAL K CLASSIC 335G KELLOGG'S",
+    "annotation_count": 59
+  },
+  {
+    "category_id": 198,
+    "name": "ALI ORIGINAL KAFFEPUTER 18STK",
+    "annotation_count": 23
+  },
+  {
+    "category_id": 199,
+    "name": "GREEN CEYLON TE ØKOLOGISK 24POS CONFECTA",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 200,
+    "name": "EVERGOOD CLASSIC KAFFEKAPSEL 16STK",
+    "annotation_count": 68
+  },
+  {
+    "category_id": 201,
+    "name": "MUSLI FRUKT 700G AXA",
+    "annotation_count": 144
+  },
+  {
+    "category_id": 202,
+    "name": "TASSIMO GEVALIA LATTE MACCHIATO KARAMELL",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 203,
+    "name": "ROOIBOS TE 20POS LIPTON",
+    "annotation_count": 11
+  },
+  {
+    "category_id": 204,
+    "name": "MELLOMBAR SALT KARAMELL 138G ELDORADO",
+    "annotation_count": 177
+  },
+  {
+    "category_id": 205,
+    "name": "CORN FLAKES 750G FIRST PRICE",
+    "annotation_count": 158
+  },
+  {
+    "category_id": 206,
+    "name": "NESCAFE VANILLA LATTE 136G NESTLE",
+    "annotation_count": 14
+  },
+  {
+    "category_id": 207,
+    "name": "LEKSANDS KNEKKE FIBERBIT 240G",
+    "annotation_count": 297
+  },
+  {
+    "category_id": 208,
+    "name": "FLATBRØD 190G IDEAL",
+    "annotation_count": 160
+  },
+  {
+    "category_id": 209,
+    "name": "DELIKATESS SESAM 285G WASA",
+    "annotation_count": 17
+  },
+  {
+    "category_id": 210,
+    "name": "COTW ESPRESSO KAFFEKAPSEL 10STK",
+    "annotation_count": 20
+  },
+  {
+    "category_id": 211,
+    "name": "BJØRN HAVREMEL 1KG AXA",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 212,
+    "name": "KNEKKEBRØD 220G SIGDAL",
+    "annotation_count": 140
+  },
+  {
+    "category_id": 213,
+    "name": "EGG FRITTGÅENDE M/L 6PK PRIOR",
+    "annotation_count": 64
+  },
+  {
+    "category_id": 214,
+    "name": "HAVREGRØT ROSIN&VANILJE 525G AXA",
+    "annotation_count": 107
+  },
+  {
+    "category_id": 215,
+    "name": "BLUE FRUIT TE PYRAMIDE 20POS LIPTON",
+    "annotation_count": 54
+  },
+  {
+    "category_id": 216,
+    "name": "Sunnmørsegg",
+    "annotation_count": 13
+  },
+  {
+    "category_id": 217,
+    "name": "MELLOMBAR POPCORN&SJOKOLADE 126G ELDORAD",
+    "annotation_count": 144
+  },
+  {
+    "category_id": 218,
+    "name": "CORN FLAKES 500G KELLOGGS",
+    "annotation_count": 178
+  },
+  {
+    "category_id": 219,
+    "name": "GREEN WORLD KAFFE ØKOL FILTERMALT 250G",
+    "annotation_count": 63
+  },
+  {
+    "category_id": 220,
+    "name": "MEIERISMØR 250G BORDPK TINE",
+    "annotation_count": 9
+  },
+  {
+    "category_id": 221,
+    "name": "PUFFET HVETE 260G FIRST PRICE",
+    "annotation_count": 17
+  },
+  {
+    "category_id": 222,
+    "name": "NESCAFÉ MOCHA 136G NESTLE",
+    "annotation_count": 54
+  },
+  {
+    "category_id": 223,
+    "name": "GRANOLA PEKAN HONNINGSRISTET 350G SYNNØV",
+    "annotation_count": 86
+  },
+  {
+    "category_id": 224,
+    "name": "SOFT FLORA LETT 540G",
+    "annotation_count": 18
+  },
+  {
+    "category_id": 225,
+    "name": "EVERGOOD CLASSIC KAFFEKAPSEL 10STK",
+    "annotation_count": 74
+  },
+  {
+    "category_id": 226,
+    "name": "LEKSANDS TREKANT HAVRE 200G",
+    "annotation_count": 12
+  },
+  {
+    "category_id": 227,
+    "name": "STORFE ENTRECOTE 180G FIRST PRICE",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 228,
+    "name": "BRUSCHETTE FINE CHEESE MARETTI",
+    "annotation_count": 25
+  },
+  {
+    "category_id": 229,
+    "name": "NESQUIK KAKAOPULVER 700G",
+    "annotation_count": 19
+  },
+  {
+    "category_id": 230,
+    "name": "JARLSBERG 27% SKIVET 120G TINE",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 231,
+    "name": "MELLOMBAR CHIA,QUINOA&NØTTER 138G",
+    "annotation_count": 43
+  },
+  {
+    "category_id": 232,
+    "name": "EGG ØKOLOGISK M/L/XL 6STK PRIOR",
+    "annotation_count": 167
+  },
+  {
+    "category_id": 233,
+    "name": "LEKSANDS KNEKKE GODT STEKT 200G",
+    "annotation_count": 260
+  },
+  {
+    "category_id": 234,
+    "name": "LANO SÅPE 2X125G",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 235,
+    "name": "FLATBRØD ØKOLOGISK 190G RØROS",
+    "annotation_count": 115
+  },
+  {
+    "category_id": 236,
+    "name": "LEKSANDS KNEKKE RUTBIT 200G",
+    "annotation_count": 187
+  },
+  {
+    "category_id": 237,
+    "name": "EGG FRITTGÅENDE L/XL 10STK PRIOR",
+    "annotation_count": 66
+  },
+  {
+    "category_id": 238,
+    "name": "KAMILLE TE ØKOLOGISK 24PK",
+    "annotation_count": 30
+  },
+  {
+    "category_id": 239,
+    "name": "MAISKAKER CHIA/HAVSALT 130G FRIGGS",
+    "annotation_count": 240
+  },
+  {
+    "category_id": 240,
+    "name": "SUPERGRANOLA GLUTENFRI 350G BARE BRA",
+    "annotation_count": 24
+  },
+  {
+    "category_id": 241,
+    "name": "SANDWICH CHEESE GRESSLØK 37G WASA",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 242,
+    "name": "BOG 390G GILDE",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 243,
+    "name": "RYVITA KNEKKEBRØD RUG 400G",
+    "annotation_count": 198
+  },
+  {
+    "category_id": 244,
+    "name": "RUGSPRØ HAVRE 180G WASA",
+    "annotation_count": 107
+  },
+  {
+    "category_id": 245,
+    "name": "ENGLISH BREAKFAST TEA 200G TWININGS",
+    "annotation_count": 4
+  },
+  {
+    "category_id": 246,
+    "name": "HUSMAN KNEKKEBRØD 260G WASA",
+    "annotation_count": 322
+  },
+  {
+    "category_id": 247,
+    "name": "MOUNT KENYA FILTERMALT 200G JACOBS",
+    "annotation_count": 13
+  },
+  {
+    "category_id": 248,
+    "name": "COTW DARK ROAST KAFFEKAPSEL 10STK",
+    "annotation_count": 6
+  },
+  {
+    "category_id": 249,
+    "name": "COTW BREAKFAST BLEND KAFFEKAPSEL 10STK",
+    "annotation_count": 9
+  },
+  {
+    "category_id": 250,
+    "name": "LEKSANDS KNEKKE NORMALT STEKT 200G",
+    "annotation_count": 271
+  },
+  {
+    "category_id": 251,
+    "name": "KNEKKEBRØD SOLSIKKE GL.FRI 190G SIGDAL",
+    "annotation_count": 15
+  },
+  {
+    "category_id": 252,
+    "name": "SIDAMO ETIOPIA HELE BØNNER 340G COTW",
+    "annotation_count": 4
+  },
+  {
+    "category_id": 253,
+    "name": "SOFT FLORA LETT 235G",
+    "annotation_count": 20
+  },
+  {
+    "category_id": 254,
+    "name": "SMØREMYK MELKEFRI 400G BERIT",
+    "annotation_count": 2
+  },
+  {
+    "category_id": 255,
+    "name": "LIPTON ICETEA MANGO PULVER 50G",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 256,
+    "name": "KAFFEFILTER PRESSKANNE 25STK EVERGOOD",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 257,
+    "name": "SANDWICH BRUNOST 36G WASA",
+    "annotation_count": 7
+  },
+  {
+    "category_id": 258,
+    "name": "EXTRA SWEET FRUIT 14G",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 259,
+    "name": "REGIA KAKAO ORIGINAL 260G",
+    "annotation_count": 81
+  },
+  {
+    "category_id": 260,
+    "name": "MUSLI ENERGI 675G AXA",
+    "annotation_count": 108
+  },
+  {
+    "category_id": 261,
+    "name": "MÜSLI HASSELNØTT 600G AXA",
+    "annotation_count": 144
+  },
+  {
+    "category_id": 262,
+    "name": "HAVREGRØT STEEL CUT DEN SORTE HAVRE",
+    "annotation_count": 14
+  },
+  {
+    "category_id": 263,
+    "name": "GRANOLA RASPBERRY  500G START!",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 264,
+    "name": "MELLOMBAR JORDBÆR HVIT SJOKOLADE 138G EL",
+    "annotation_count": 116
+  },
+  {
+    "category_id": 265,
+    "name": "MELLOMBAR SUKKERFRI M/SJOKO 138G",
+    "annotation_count": 121
+  },
+  {
+    "category_id": 266,
+    "name": "SJOKOLADEDRIKK LETT 10X14G RETT I KOPPEN",
+    "annotation_count": 55
+  },
+  {
+    "category_id": 267,
+    "name": "EGGEHVITE 500G ELDORADO",
+    "annotation_count": 19
+  },
+  {
+    "category_id": 268,
+    "name": "SUPERGRØT KANEL&PUFFET QUINOA 54G",
+    "annotation_count": 177
+  },
+  {
+    "category_id": 269,
+    "name": "Eldorado Egg fra Toten",
+    "annotation_count": 33
+  },
+  {
+    "category_id": 270,
+    "name": "GRISSINI M/ROSMARIN 200G JACOBS UTVALGTE",
+    "annotation_count": 14
+  },
+  {
+    "category_id": 271,
+    "name": "FRUKOST KNEKKEBRØD 240G WASA",
+    "annotation_count": 307
+  },
+  {
+    "category_id": 272,
+    "name": "EVERGOOD KOFFEINFRI FILTERMALT 250G",
+    "annotation_count": 67
+  },
+  {
+    "category_id": 273,
+    "name": "VITA HJERTEGO LETTMARGARIN 370G",
+    "annotation_count": 16
+  },
+  {
+    "category_id": 274,
+    "name": "VESTLANDSLEFSA TØRRE 10STK 360G",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 275,
+    "name": "EGG FRITTGÅENDE 18STK S/M FIRST PRICE",
+    "annotation_count": 223
+  },
+  {
+    "category_id": 276,
+    "name": "HVITLØK 100G PK",
+    "annotation_count": 2
+  },
+  {
+    "category_id": 277,
+    "name": "ALPEN MÜSLI WEETABIX",
+    "annotation_count": 12
+  },
+  {
+    "category_id": 278,
+    "name": "DELICATE CRACKERS SEA SALT 180G WASA",
+    "annotation_count": 10
+  },
+  {
+    "category_id": 279,
+    "name": "KNEKKEBRØD NATURELL GL.FRI 240G WASA",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 280,
+    "name": "RISKAKER 100G FIRST PRICE",
+    "annotation_count": 262
+  },
+  {
+    "category_id": 281,
+    "name": "GRANDE 16KAPSLER DOLCE GUSTO",
+    "annotation_count": 14
+  },
+  {
+    "category_id": 282,
+    "name": "FILTERPOSER NR.4 200STK ALI",
+    "annotation_count": 98
+  },
+  {
+    "category_id": 283,
+    "name": "GÅRDSEGG M/L 12STK ELDORADO",
+    "annotation_count": 127
+  },
+  {
+    "category_id": 284,
+    "name": "MELLOMBAR KOKOS&SJOKOLADE 138G ELDORADO",
+    "annotation_count": 168
+  },
+  {
+    "category_id": 285,
+    "name": "Leka Egg 10stk",
+    "annotation_count": 2
+  },
+  {
+    "category_id": 286,
+    "name": "EGG L 10STK TOTEN",
+    "annotation_count": 9
+  },
+  {
+    "category_id": 287,
+    "name": "ENGLISH BREAKFAST TEA 25POS TWININGS",
+    "annotation_count": 23
+  },
+  {
+    "category_id": 288,
+    "name": "Sunnmørsegg 10stk",
+    "annotation_count": 3
+  },
+  {
+    "category_id": 289,
+    "name": "OREO O'S FROKOSTBLANDING 350G",
+    "annotation_count": 18
+  },
+  {
+    "category_id": 290,
+    "name": "SANDWICH CHEESE TOMAT&BASILIKUM 40G WASA",
+    "annotation_count": 29
+  },
+  {
+    "category_id": 291,
+    "name": "PREMIUM DARK ORANGE 100G FREIA",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 292,
+    "name": "NESCAFE AZERA AMERICANO 100G",
+    "annotation_count": 35
+  },
+  {
+    "category_id": 293,
+    "name": "NUTELLA BISCUITS 193G",
+    "annotation_count": 2
+  },
+  {
+    "category_id": 294,
+    "name": "GRISSINI SALT 125G GRANFORNO",
+    "annotation_count": 12
+  },
+  {
+    "category_id": 295,
+    "name": "MELANGE FLYTENDE 500ML",
+    "annotation_count": 7
+  },
+  {
+    "category_id": 296,
+    "name": "FIBER BALANCE 230G WASA",
+    "annotation_count": 309
+  },
+  {
+    "category_id": 297,
+    "name": "SOLBÆR TE 25POS TWININGS",
+    "annotation_count": 48
+  },
+  {
+    "category_id": 298,
+    "name": "O'BOY ORIGINAL 450G FREIA",
+    "annotation_count": 109
+  },
+  {
+    "category_id": 299,
+    "name": "KAMILLE TE 20POS LIPTON",
+    "annotation_count": 3
+  },
+  {
+    "category_id": 300,
+    "name": "",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 301,
+    "name": "Gårdsegg fra Fana 10stk",
+    "annotation_count": 6
+  },
+  {
+    "category_id": 302,
+    "name": "MELANGE MARGARIN 250G",
+    "annotation_count": 9
+  },
+  {
+    "category_id": 303,
+    "name": "KNEKKEBRØD HAVRE 220G SIGDAL",
+    "annotation_count": 19
+  },
+  {
+    "category_id": 304,
+    "name": "EVERGOOD CLASSIC KOKMALT 250G",
+    "annotation_count": 147
+  },
+  {
+    "category_id": 305,
+    "name": "GRANOLA KAKAO&BRINGEBÆR 430G BARE BRA",
+    "annotation_count": 122
+  },
+  {
+    "category_id": 306,
+    "name": "NESCAFE GULL 100G REFILL",
+    "annotation_count": 47
+  },
+  {
+    "category_id": 307,
+    "name": "MAISKAKER OST 125G FRIGGS",
+    "annotation_count": 283
+  },
+  {
+    "category_id": 308,
+    "name": "HAVREGRANOLA  JORDBÆR&BRINGEBÆR 400G URK",
+    "annotation_count": 18
+  },
+  {
+    "category_id": 309,
+    "name": "FIRE RØDE FRUKTER 25POS TWININGS",
+    "annotation_count": 67
+  },
+  {
+    "category_id": 310,
+    "name": "LIPTON ICETEA LEMON PULVER 50G",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 311,
+    "name": "MELBA TOAST FIRKANTET 100G MEULEN",
+    "annotation_count": 33
+  },
+  {
+    "category_id": 312,
+    "name": "Tørresvik Gård Kvalitetsegg 10stk",
+    "annotation_count": 33
+  },
+  {
+    "category_id": 313,
+    "name": "FLOTT MATFETT 500G",
+    "annotation_count": 4
+  },
+  {
+    "category_id": 314,
+    "name": "CAFE AU LAIT 16KAPSLER DOLCE GUSTO",
+    "annotation_count": 18
+  },
+  {
+    "category_id": 315,
+    "name": "4-KORN 675G AXA",
+    "annotation_count": 134
+  },
+  {
+    "category_id": 316,
+    "name": "FIBERRIK SOLSIKKE 125G SÆTRE",
+    "annotation_count": 23
+  },
+  {
+    "category_id": 317,
+    "name": "POWERKNEKKEBRØD GL.FRI 225G SCHÄR",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 318,
+    "name": "PANNEKAKER 6STK ELDORADO",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 319,
+    "name": "LIPTON ICETEA PEACH PULVER 50G",
+    "annotation_count": 3
+  },
+  {
+    "category_id": 320,
+    "name": "EARL GREY TEA 50POS FIRST PRICE",
+    "annotation_count": 30
+  },
+  {
+    "category_id": 321,
+    "name": "GIFFLAR KANEL 300G PÅGEN",
+    "annotation_count": 3
+  },
+  {
+    "category_id": 322,
+    "name": "STEKEMARGARIN 500G FIRST PRICE",
+    "annotation_count": 8
+  },
+  {
+    "category_id": 323,
+    "name": "KRUTONGER CHEESE&GARLIC 142G CHATHAM",
+    "annotation_count": 5
+  },
+  {
+    "category_id": 324,
+    "name": "NESCAFE LATTE 144G",
+    "annotation_count": 29
+  },
+  {
+    "category_id": 325,
+    "name": "NESCAFE GULL 100G",
+    "annotation_count": 58
+  },
+  {
+    "category_id": 326,
+    "name": "SOFT FLORA ORIGINAL 540G",
+    "annotation_count": 45
+  },
+  {
+    "category_id": 327,
+    "name": "POTETCHIPS SORT TRØFFEL 125G TORRES",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 328,
+    "name": "GRANOLA EPLE&BÆR 375G JACOBS UTVALGTE",
+    "annotation_count": 40
+  },
+  {
+    "category_id": 329,
+    "name": "SKORPOR FULLKORN 240G PÅGEN",
+    "annotation_count": 170
+  },
+  {
+    "category_id": 330,
+    "name": "GRANOLA MED JORDBÆR 390G SYNNØVE",
+    "annotation_count": 103
+  },
+  {
+    "category_id": 331,
+    "name": "SANDWICH PIZZA 37G WASA",
+    "annotation_count": 7
+  },
+  {
+    "category_id": 332,
+    "name": "COTW LUNGO DARK KAFFEKAPSEL 10STK",
+    "annotation_count": 12
+  },
+  {
+    "category_id": 333,
+    "name": "MELBATOAST RUND 110G MEULEN",
+    "annotation_count": 101
+  },
+  {
+    "category_id": 334,
+    "name": "CHAI-TE ORIGINAL 20POS PUKKA",
+    "annotation_count": 50
+  },
+  {
+    "category_id": 335,
+    "name": "STORFE SHORT RIBS GREATER OMAHA LV",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 336,
+    "name": "SVARTHAVRERIS ØKOLOGISK DEN SORTE HAVRE",
+    "annotation_count": 19
+  },
+  {
+    "category_id": 337,
+    "name": "FEEL NEW URTETE ØKOLOGISK 20POS PUKKA",
+    "annotation_count": 6
+  },
+  {
+    "category_id": 338,
+    "name": "HUSMAN KNEKKEBRØD 520G WASA",
+    "annotation_count": 159
+  },
+  {
+    "category_id": 339,
+    "name": "ALI ORIGINAL KAFFEKAPSEL 16STK",
+    "annotation_count": 57
+  },
+  {
+    "category_id": 340,
+    "name": "EVERGOOD DARK ROAST HELE BØNNER 500G",
+    "annotation_count": 54
+  },
+  {
+    "category_id": 341,
+    "name": "EVERGOOD CLASSIC HELE BØNNER 500G",
+    "annotation_count": 76
+  },
+  {
+    "category_id": 342,
+    "name": "HAVREFRAS 375G",
+    "annotation_count": 167
+  },
+  {
+    "category_id": 343,
+    "name": "KNEKKS KJEKS ORIGINAL 190G RØROS",
+    "annotation_count": 20
+  },
+  {
+    "category_id": 344,
+    "name": "EVERGOOD DARK ROAST KAFFEKAPSEL 16STK",
+    "annotation_count": 33
+  },
+  {
+    "category_id": 345,
+    "name": "KNEKKEBRØD URTER&HAVSALT 220G SIGDAL",
+    "annotation_count": 223
+  },
+  {
+    "category_id": 346,
+    "name": "SANDWICH SOUR CREAM&ONION 33G WASA",
+    "annotation_count": 3
+  },
+  {
+    "category_id": 347,
+    "name": "EVERGOOD DARK ROAST PRESSMALT 250G",
+    "annotation_count": 53
+  },
+  {
+    "category_id": 348,
+    "name": "ALI ORIGINAL HELE BØNNER 250G",
+    "annotation_count": 24
+  },
+  {
+    "category_id": 349,
+    "name": "KNEKKEBRØD SPORT+ 210G WASA",
+    "annotation_count": 364
+  },
+  {
+    "category_id": 350,
+    "name": "BLÅ JAVA HELE BØNNER 340G COTW",
+    "annotation_count": 1
+  },
+  {
+    "category_id": 351,
+    "name": "BREMYKT MYKERE 500G",
+    "annotation_count": 26
+  },
+  {
+    "category_id": 352,
+    "name": "PEPPERMINT&LICORICE URTETE 20POS PUKKA",
+    "annotation_count": 18
+  },
+  {
+    "category_id": 353,
+    "name": "EXCELSO COLOMBIA FILTERMALT 200G JACOBS",
+    "annotation_count": 5
+  },
+  {
+    "category_id": 354,
+    "name": "GIFFLAR BRINGEBÆR&VANILJE 260G PÅGEN",
+    "annotation_count": 2
+  },
+  {
+    "category_id": 355,
+    "name": "unknown_product",
+    "annotation_count": 422
+  }
+]
