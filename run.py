@@ -15,13 +15,14 @@ import argparse
 import json
 import time
 from pathlib import Path
+from queue import Queue
+from threading import Thread
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-from PIL import Image
-from torchvision import transforms
-from torchvision.transforms.functional import resize, center_crop, normalize, to_tensor
+from torchvision.transforms import InterpolationMode
+from torchvision.transforms.functional import center_crop, normalize, resize
 from ultralytics import YOLO
 
 from vision_task.config import (
@@ -42,9 +43,13 @@ REF_EMBEDDINGS = ROOT / "models" / "ref_embeddings.pt"
 
 # --- Thresholds (tune in Phase 8) ---
 DETECT_CONF = 0.25  # Low to maximize recall (70% of score)
-CLASSIFY_BATCH = 128  # H100 can handle more; L4 can do 64 easily at 518
-UNKNOWN_CATEGORY_ID = 355  # category for unknown_product
-UNKNOWN_THRESHOLD = 0.0  # cosine sim below this → unknown (disabled by default)
+CLASSIFY_BATCH = 128
+UNKNOWN_CATEGORY_ID = 355
+UNKNOWN_THRESHOLD = 0.0  # cosine sim below this -> unknown (disabled)
+
+# Pre-computed normalization tensors on GPU (set in main)
+_NORM_MEAN = None
+_NORM_STD = None
 
 
 def parse_args():
@@ -59,19 +64,19 @@ def parse_args():
 
 
 def load_detector(device):
-    """Load YOLO11x detector and warm up."""
+    """Load YOLO11x detector, warm up in FP16."""
     assert YOLO_WEIGHTS.exists(), f"YOLO weights not found: {YOLO_WEIGHTS}"
     model = YOLO(str(YOLO_WEIGHTS))
-    # Warmup: run a dummy image to trigger CUDA kernel compilation
     dummy = np.zeros((640, 640, 3), dtype=np.uint8)
-    model(dummy, imgsz=DETECTOR_IMGSZ, conf=DETECT_CONF, device=device, verbose=False)
+    model(dummy, imgsz=DETECTOR_IMGSZ, conf=DETECT_CONF, device=device,
+          half=True, verbose=False)
     return model
 
 
 def load_classifier(device):
-    """Load DINOv2 embedder from fine-tuned checkpoint, in half precision."""
+    """Load DINOv2 embedder from fine-tuned checkpoint, FP16."""
     assert DINOV2_WEIGHTS.exists(), f"DINOv2 weights not found: {DINOV2_WEIGHTS}"
-    assert CLASSIFIER_CHECKPOINT.exists(), f"Classifier checkpoint not found: {CLASSIFIER_CHECKPOINT}"
+    assert CLASSIFIER_CHECKPOINT.exists(), f"Checkpoint not found: {CLASSIFIER_CHECKPOINT}"
 
     model = GroceryEmbedder(
         weights_path=str(DINOV2_WEIGHTS),
@@ -79,8 +84,19 @@ def load_classifier(device):
     )
     checkpoint = torch.load(CLASSIFIER_CHECKPOINT, map_location="cpu", weights_only=True)
     model.load_state_dict(checkpoint["model_state_dict"])
-    model = model.to(device).half()  # FP16 — no accuracy loss for inference
-    model.eval()
+    model = model.to(device).half().eval()
+
+    # torch.compile for faster ViT inference (PyTorch 2.0+)
+    try:
+        model = torch.compile(model, mode="reduce-overhead")
+        # Warmup compiled model
+        dummy = torch.randn(1, 3, CLASSIFIER_SIZE, CLASSIFIER_SIZE,
+                            device=device, dtype=torch.float16)
+        model(dummy)
+        print("  torch.compile: enabled")
+    except Exception:
+        print("  torch.compile: not available, using eager mode")
+
     return model
 
 
@@ -88,63 +104,76 @@ def load_ref_embeddings(device):
     """Load pre-computed reference embeddings."""
     assert REF_EMBEDDINGS.exists(), f"Ref embeddings not found: {REF_EMBEDDINGS}"
     data = torch.load(REF_EMBEDDINGS, map_location=device, weights_only=True)
-    ref_embs = data["embeddings"].to(device).half()  # [C, 768] L2-normalized, FP16
-    ref_ids = data["category_ids"]  # [C] int64
+    ref_embs = data["embeddings"].to(device).half()  # [C, 768]
+    ref_ids = data["category_ids"]  # [C]
     return ref_embs, ref_ids
 
 
-def extract_and_transform_crops(image, boxes):
-    """Crop detected regions and apply eval transform, return stacked tensor.
+def prefetch_images(paths, max_ahead=3):
+    """Load images in background thread, yield (path, numpy_rgb) pairs."""
+    q = Queue(maxsize=max_ahead)
+
+    def _loader():
+        for p in paths:
+            from PIL import Image
+            img = np.array(Image.open(p).convert("RGB"))
+            q.put((p, img))
+        q.put(None)
+
+    t = Thread(target=_loader, daemon=True)
+    t.start()
+    while True:
+        item = q.get()
+        if item is None:
+            break
+        yield item
+
+
+def extract_and_transform_crops(img_tensor, boxes):
+    """Crop from GPU tensor, transform entirely on GPU.
 
     Args:
-        image: PIL Image (RGB)
-        boxes: tensor [N, 4] in xyxy format (pixels)
+        img_tensor: [3, H, W] float32 GPU tensor, range [0, 1]
+        boxes: [N, 4] xyxy tensor (CPU)
 
     Returns:
-        tensor [M, 3, 518, 518] (FP16), valid_indices list
+        [M, 3, 518, 518] FP16 GPU tensor, valid_indices list
     """
-    w, h = image.size
-    tensors = []
+    _, h, w = img_tensor.shape
+    crops = []
     valid_indices = []
 
-    for i, box in enumerate(boxes):
-        x1, y1, x2, y2 = box.tolist()
-        x1, y1 = max(0, int(x1)), max(0, int(y1))
-        x2, y2 = min(w, int(x2)), min(h, int(y2))
+    for i in range(boxes.shape[0]):
+        x1, y1, x2, y2 = boxes[i].int().tolist()
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
         if x2 <= x1 or y2 <= y1:
             continue
 
-        crop = image.crop((x1, y1, x2, y2))
-        t = to_tensor(crop)
-        t = resize(t, [CLASSIFIER_RESIZE], interpolation=transforms.InterpolationMode.BICUBIC, antialias=True)
-        t = center_crop(t, [CLASSIFIER_SIZE, CLASSIFIER_SIZE])
-        t = normalize(t, mean=IMAGENET_MEAN, std=IMAGENET_STD)
-        tensors.append(t)
+        crop = img_tensor[:, y1:y2, x1:x2]  # GPU slice, zero-copy
+        crop = resize(crop, [CLASSIFIER_RESIZE],
+                      interpolation=InterpolationMode.BICUBIC, antialias=True)
+        crop = center_crop(crop, [CLASSIFIER_SIZE, CLASSIFIER_SIZE])
+        crops.append(crop)
         valid_indices.append(i)
 
-    if not tensors:
+    if not crops:
         return None, []
 
-    return torch.stack(tensors).half(), valid_indices
+    batch = torch.stack(crops)  # [N, 3, 518, 518] already on GPU
+    batch = (batch - _NORM_MEAN) / _NORM_STD  # vectorized normalize
+    return batch.half(), valid_indices
 
 
 @torch.no_grad()
-def classify_batch(crop_tensors, model, ref_embs, ref_ids, device):
-    """Classify pre-transformed crop tensors via cosine similarity.
-
-    Args:
-        crop_tensors: [N, 3, 518, 518] FP16 tensor
-        model: DINOv2 embedder (FP16)
-
-    Returns:
-        category_ids: list[int], cos_scores: list[float]
-    """
+def classify_batch(crop_tensors, model, ref_embs, ref_ids):
+    """Classify crop tensors via cosine similarity to reference embeddings."""
     category_ids = []
     cos_scores = []
     n = crop_tensors.shape[0]
 
     for i in range(0, n, CLASSIFY_BATCH):
-        batch = crop_tensors[i:i + CLASSIFY_BATCH].to(device)
+        batch = crop_tensors[i:i + CLASSIFY_BATCH]
         embs = model(batch)  # [B, 768] FP16
         embs = F.normalize(embs.float(), dim=1).half()
 
@@ -163,15 +192,23 @@ def classify_batch(crop_tensors, model, ref_embs, ref_ids, device):
 
 
 def image_id_from_filename(filename):
-    """Extract numeric image_id from filename like 'img_00042.jpg' → 42."""
+    """Extract numeric image_id from filename like 'img_00042.jpg' -> 42."""
     stem = Path(filename).stem
     digits = "".join(c for c in stem if c.isdigit())
     return int(digits) if digits else hash(stem) % 100000
 
 
 def main():
+    global _NORM_MEAN, _NORM_STD
     args = parse_args()
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
+
+    torch.backends.cudnn.benchmark = True
+
+    # Pre-compute normalization tensors on GPU
+    _NORM_MEAN = torch.tensor(IMAGENET_MEAN, device=device).view(1, 3, 1, 1)
+    _NORM_STD = torch.tensor(IMAGENET_STD, device=device).view(1, 3, 1, 1)
+
     print(f"Device: {device}")
 
     # --- Load models ---
@@ -196,21 +233,25 @@ def main():
     # --- Run inference ---
     predictions = []
     t_start = time.time()
+    t_detect = 0.0
+    t_crop = 0.0
+    t_classify = 0.0
 
-    for img_idx, img_path in enumerate(image_paths):
-        image = Image.open(img_path).convert("RGB")
+    for img_idx, (img_path, img_np) in enumerate(prefetch_images(image_paths)):
         image_id = image_id_from_filename(img_path.name)
-        img_np = np.array(image)
 
-        # Stage 1: Detect (pass numpy array — avoids re-reading from disk)
+        # Stage 1: Detect (FP16)
+        td0 = time.time()
         results = detector(
             img_np,
             imgsz=DETECTOR_IMGSZ,
             conf=args.detect_conf,
             device=device,
+            half=True,
             verbose=False,
         )
         boxes = results[0].boxes
+        t_detect += time.time() - td0
 
         if len(boxes) == 0:
             continue
@@ -218,14 +259,28 @@ def main():
         xyxy = boxes.xyxy.cpu()  # [N, 4]
         det_scores = boxes.conf.cpu()  # [N]
 
-        # Stage 2: Crop, transform, classify
-        crop_tensors, valid_indices = extract_and_transform_crops(image, xyxy)
+        # Stage 2: GPU crop + transform
+        tc0 = time.time()
+        img_tensor = (
+            torch.from_numpy(img_np)
+            .permute(2, 0, 1)
+            .to(device=device, dtype=torch.float32)
+            .div_(255.0)
+        )
+        crop_tensors, valid_indices = extract_and_transform_crops(img_tensor, xyxy)
+        del img_tensor  # free GPU memory
+        t_crop += time.time() - tc0
+
         if crop_tensors is None:
             continue
 
+        # Stage 3: Classify
+        tcl0 = time.time()
         cat_ids, cos_scores = classify_batch(
-            crop_tensors, classifier, ref_embs, ref_ids, device
+            crop_tensors, classifier, ref_embs, ref_ids
         )
+        del crop_tensors  # free GPU memory
+        t_classify += time.time() - tcl0
 
         # Build COCO predictions
         for j, vi in enumerate(valid_indices):
@@ -249,16 +304,24 @@ def main():
                   f"{len(boxes)} dets, {elapsed:.1f}s, {rate:.1f} img/s")
 
     # --- Summary ---
+    total_time = time.time() - t_start
+
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         print(f"Peak VRAM: {torch.cuda.max_memory_allocated() / 1e9:.1f} GB")
+
+    print(f"\nTiming breakdown:")
+    print(f"  Detection:      {t_detect:6.1f}s ({t_detect/max(total_time,1)*100:4.0f}%)")
+    print(f"  Crop+transform: {t_crop:6.1f}s ({t_crop/max(total_time,1)*100:4.0f}%)")
+    print(f"  Classification: {t_classify:6.1f}s ({t_classify/max(total_time,1)*100:4.0f}%)")
+    other = total_time - t_detect - t_crop - t_classify
+    print(f"  I/O + overhead:  {other:5.1f}s ({other/max(total_time,1)*100:4.0f}%)")
 
     output_path = Path(args.output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(predictions, f)
 
-    total_time = time.time() - t_start
     print(f"\nDone! {len(predictions)} predictions from {len(image_paths)} images")
     print(f"Saved to: {output_path}")
     print(f"Total: {total_time:.1f}s ({total_time / max(len(image_paths), 1):.2f}s/image)")
