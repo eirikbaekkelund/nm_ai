@@ -22,10 +22,15 @@
 - mixup: 0.3
 - Lower LR for shelf fine-tune (0.001 vs default 0.01)
 
+## Current Best (D1)
+- mAP@50=0.934, mAP@50-95=0.622, Recall=0.905, Precision=0.889
+- 30 epochs, SGD lr0=0.001, batch=8, imgsz=1280
+
 ## Evaluation
 - Metric: mAP@50 and mAP@50:95
-- Target: mAP@50 > 0.85
 - Prioritize **recall** over precision — missing a product kills the 70% score
+- **Kaggle mindset**: never stop optimizing. Every 0.01 mAP matters for leaderboard placement.
+  All detection experiments (D2 SKU-110K, D3 DETR, D4 RT-DETR, ensembles) remain on the table.
 
 ## DETR Comparison Experiments
 
@@ -46,10 +51,10 @@
 - **Why try**: Faster inference than DETR, same NMS-free benefit, but no SKU-110K pretraining available
 - **VRAM (inference)**: RT-DETR-x at 1280 ~6 GB
 
-### Decision Rule
-- Run D1 (YOLO direct), D3 (HF DETR SKU-110K→shelf) in parallel
-- Compare mAP@50 and **recall** — ship whichever wins
-- D4 (RT-DETR) only if D3 shows DETR family is better but inference speed is a concern
+### Experiment Strategy
+- Run all variants: D1 (YOLO direct), D2 (YOLO+SKU-110K), D3 (DETR), D4 (RT-DETR)
+- Compare mAP@50 and **recall** — ship whichever wins, or ensemble top models
+- Consider Weighted Box Fusion (WBF) to combine YOLO + DETR predictions
 
 ## Training Scripts
 - `python -m vision_task.detection.train_detector` — YOLO/RT-DETR (Ultralytics API)
