@@ -1,11 +1,13 @@
 """
-Two-stage YOLO11x detection training:
+Two-stage YOLO detection training (supports YOLO11x, YOLO26x, YOLO26x-p2, RT-DETR):
   Stage 1: SKU-110K pretraining (optional, ~1.7M shelf annotations)
   Stage 2: Shelf fine-tuning (248 images, 22K annotations)
 
 Usage:
-  python -m vision_task.detection.train_detector                    # Full chain
+  python -m vision_task.detection.train_detector                    # Full chain (YOLO11x)
   python -m vision_task.detection.train_detector --skip_sku110k     # Direct fine-tune
+  python -m vision_task.detection.train_detector --skip_sku110k --base_model yolo26x.pt   # YOLO26x
+  python -m vision_task.detection.train_detector --skip_sku110k --base_model yolo26x-p2.pt  # YOLO26x with P2 head
   python -m vision_task.detection.train_detector --shelf_epochs 2 --batch_shelf 2  # Quick test
 """
 
@@ -40,7 +42,7 @@ def resolve_yaml(yaml_path):
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Train YOLO11x detector")
+    p = argparse.ArgumentParser(description="Train YOLO detector (11x, 26x, 26x-p2, RT-DETR)")
     p.add_argument("--skip_sku110k", action="store_true", help="Skip SKU-110K pretraining, fine-tune from COCO weights")
     p.add_argument("--sku110k_epochs", type=int, default=50)
     p.add_argument("--shelf_epochs", type=int, default=30)
@@ -48,7 +50,11 @@ def parse_args():
     p.add_argument("--batch_shelf", type=int, default=8, help="Batch size for shelf fine-tune")
     p.add_argument("--imgsz", type=int, default=DETECTOR_IMGSZ)
     p.add_argument("--device", default="0")
-    p.add_argument("--base_model", default="yolo11x.pt", help="Starting COCO-pretrained weights")
+    p.add_argument(
+        "--base_model",
+        default="yolo11x.pt",
+        help="Starting weights (yolo11x.pt, yolo26x.pt, yolo26x-p2.pt, rtdetr-x.pt)",
+    )
     return p.parse_args()
 
 

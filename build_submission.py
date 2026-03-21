@@ -1,16 +1,17 @@
-"""Build competition submission .zip — ONNX models, no vision_task package.
+"""Build competition submission .zip — YOLO ONNX + native DINOv2 classifier.
 
 Usage:
     python build_submission.py                     # Default: submission.zip
     python build_submission.py --output my.zip     # Custom name
 
 Prerequisites:
-    Run export_models.py first to create ONNX files.
+    Run export_models.py first to create model files.
 
 Bundle contents:
-  - run.py                       (~6 KB)
-  - models/yolo.onnx             (~109 MB FP16)
-  - models/classifier.onnx       (~174 MB FP16)
+  - run.py                       (~8 KB)
+  - embedder.py                  (~0.5 KB)
+  - models/yolo.onnx             (~109-115 MB FP16)
+  - models/classifier.pt         (~173 MB FP16 state_dict)
   - models/ref_embeddings.pt     (~1 MB)
 """
 
@@ -23,8 +24,9 @@ ROOT = Path(__file__).resolve().parent
 
 FILES = [
     "run.py",
+    "embedder.py",
     "models/yolo.onnx",
-    "models/classifier.onnx",
+    "models/classifier.pt",
     "models/ref_embeddings.pt",
 ]
 
