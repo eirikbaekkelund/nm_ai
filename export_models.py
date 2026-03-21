@@ -87,7 +87,7 @@ def export_classifier():
     from onnxconverter_common import float16
 
     model_onnx = onnx.load(str(dst_fp32))
-    model_fp16 = float16.convert_float_model_to_float16(model_onnx)
+    model_fp16 = float16.convert_float_to_float16(model_onnx)
     onnx.save(model_fp16, str(dst))
 
     # Clean up FP32 file
