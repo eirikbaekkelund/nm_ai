@@ -168,7 +168,9 @@ def embed_crops(crop_tensors, model, device, batch_size=128):
     for i in range(0, n, batch_size):
         batch = crop_tensors[i : i + batch_size].to(device, dtype=torch.float16)
         embs = model(batch)
-        embs = F.normalize(embs.float(), dim=1)
+        # FP16 safety: ViT attention can overflow to Inf in half precision
+        embs = torch.nan_to_num(embs.float(), nan=0.0, posinf=1e4, neginf=-1e4)
+        embs = F.normalize(embs, dim=1)
         all_embs.append(embs)
     return torch.cat(all_embs, dim=0)
 

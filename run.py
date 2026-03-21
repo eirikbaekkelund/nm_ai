@@ -228,7 +228,9 @@ def embed_crops(crop_tensors, model, device):
     for i in range(0, n, CLASSIFY_BATCH):
         batch = crop_tensors[i : i + CLASSIFY_BATCH].to(device)
         embs = model(batch)
-        embs = F.normalize(embs.float(), dim=1)
+        # FP16 safety: ViT attention can overflow to Inf in half precision
+        embs = torch.nan_to_num(embs.float(), nan=0.0, posinf=1e4, neginf=-1e4)
+        embs = F.normalize(embs, dim=1)
         all_embs.append(embs)
     return torch.cat(all_embs, dim=0)
 
@@ -435,8 +437,10 @@ def main():
 
     # Load reference embeddings
     ref_data = torch.load(str(REF_EMBEDDINGS), map_location=device, weights_only=True)
-    ref_embs = F.normalize(ref_data["embeddings"].to(device).float(), dim=1)
+    ref_raw = torch.nan_to_num(ref_data["embeddings"].to(device).float(), nan=0.0, posinf=1e4, neginf=-1e4)
+    ref_embs = F.normalize(ref_raw, dim=1)
     ref_ids = ref_data["category_ids"]
+    del ref_raw
 
     input_dir = Path(args.input_dir)
     image_paths = sorted(
@@ -487,6 +491,9 @@ def main():
 
         for j, vi in enumerate(valid_indices):
             x1, y1, x2, y2 = boxes_xyxy[vi].tolist()
+            score_val = float(det_scores[vi]) * cos_scores[j]
+            if not np.isfinite(score_val):
+                score_val = 0.0001
             predictions.append(
                 {
                     "image_id": image_id,
@@ -497,7 +504,7 @@ def main():
                         round(x2 - x1, 2),
                         round(y2 - y1, 2),
                     ],
-                    "score": round(float(det_scores[vi]) * cos_scores[j], 4),
+                    "score": round(score_val, 4),
                 }
             )
 
