@@ -92,15 +92,18 @@ def parse_args():
     )
     p.add_argument(
         "--selection",
-        choices=["centroid", "diverse"],
-        default="centroid",
-        help="Selection strategy: centroid (most typical) or diverse (max coverage)",
+        choices=["centroid", "diverse", "confirmed"],
+        default="confirmed",
+        help="Selection strategy: centroid (closest to shelf centroid), "
+        "diverse (max coverage), confirmed (closest to product refs — best for "
+        "categories WITH existing refs)",
     )
     p.add_argument(
-        "--min_intra_sim",
+        "--min_confirm_sim",
         type=float,
-        default=0.0,
-        help="Minimum cosine similarity to centroid for a crop to be eligible (quality filter)",
+        default=0.5,
+        help="Minimum cosine similarity to product ref for a shelf crop to be 'confirmed' "
+        "(only used with --selection confirmed)",
     )
     p.add_argument(
         "--crops_dir",
@@ -219,17 +222,27 @@ def main():
             len(product_ref_cats),
         )
 
+    # ── Build per-category product ref centroids (for confirmed selection) ───
+    ref_cat_embs = {}
+    if args.merge and Path(args.merge).exists():
+        for cat_id in product_ref_cats:
+            mask = existing["category_ids"] == cat_id
+            cat_refs = F.normalize(existing["embeddings"][mask].float(), dim=1)
+            ref_cat_embs[cat_id] = cat_refs
+
     # ── Group by category and select ──────────────────────────────────────────
     cat_to_indices = defaultdict(list)
     for i, lbl in enumerate(all_labels.tolist()):
         cat_to_indices[lbl].append(i)
 
-    selector = select_centroid if args.selection == "centroid" else select_diverse
+    fallback_selector = select_centroid if args.selection != "diverse" else select_diverse
 
     selected_embs = []
     selected_labels = []
     no_ref_cats = []
     with_ref_cats = []
+    n_confirmed = 0
+    n_fallback = 0
 
     for cat_id in sorted(cat_to_indices.keys()):
         indices = cat_to_indices[cat_id]
@@ -238,17 +251,35 @@ def main():
         has_product_refs = cat_id in product_ref_cats
         k = args.k_per_cat if has_product_refs else args.k_no_ref
 
-        # Quality filter: remove crops too far from centroid
-        if args.min_intra_sim > 0 and cat_embs.shape[0] > k:
-            centroid = F.normalize(cat_embs.mean(dim=0, keepdim=True), dim=1)
-            sims = (cat_embs @ centroid.T).squeeze(1)
-            mask = sims >= args.min_intra_sim
-            if mask.sum() >= k:
-                cat_embs = cat_embs[mask]
+        if args.selection == "confirmed" and has_product_refs and cat_id in ref_cat_embs:
+            # CONFIRMED selection: score each shelf crop by max-sim to product refs
+            # Only keep crops that the model confidently matches to this product
+            cat_refs = ref_cat_embs[cat_id]  # [n_ref, 768]
+            sims_to_refs = cat_embs @ cat_refs.T  # [n_shelf, n_ref]
+            max_sims, _ = sims_to_refs.max(dim=1)  # best ref match per crop
 
-        chosen = selector(cat_embs, k)
+            # Filter by confirmation threshold
+            confirmed_mask = max_sims >= args.min_confirm_sim
+            n_above = confirmed_mask.sum().item()
 
-        # Also add the class centroid as an extra ref (more robust than any individual crop)
+            if n_above >= max(1, k // 2):
+                # Enough confirmed crops — use them, ranked by similarity
+                confirmed_embs = cat_embs[confirmed_mask]
+                confirmed_sims = max_sims[confirmed_mask]
+                _, top_k = confirmed_sims.topk(min(k, n_above))
+                chosen = confirmed_embs[top_k]
+                n_confirmed += 1
+            else:
+                # Not enough confirmed — fall back to centroid selection
+                chosen = fallback_selector(cat_embs, k)
+                n_fallback += 1
+        else:
+            # No product refs or not using confirmed mode — use centroid/diverse
+            chosen = fallback_selector(cat_embs, k)
+            n_fallback += 1
+
+        # Always add the shelf crop centroid as an extra ref
+        # (robust to individual crop noise — represents "average shelf appearance")
         centroid = F.normalize(cat_embs.mean(dim=0, keepdim=True), dim=1)
         chosen = torch.cat([chosen, centroid], dim=0)
 
@@ -279,6 +310,12 @@ def main():
         args.k_no_ref,
         no_ref_cats,
     )
+    if args.selection == "confirmed":
+        logger.info(
+            "  Confirmed selection: %d cats confirmed, %d cats fell back to centroid",
+            n_confirmed,
+            n_fallback,
+        )
 
     # ── Merge with existing product refs ──────────────────────────────────────
     if args.merge and Path(args.merge).exists():
