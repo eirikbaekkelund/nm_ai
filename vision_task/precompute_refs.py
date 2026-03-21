@@ -4,8 +4,13 @@ Pre-compute L2-normalized reference embeddings for sandbox inference.
 Loads trained DINOv2 from checkpoint, embeds all reference product images,
 averages per-category, and saves to models/ref_embeddings.pt.
 
+Accepts both formats:
+  - Training checkpoint: dict with "model_state_dict" key
+  - Stripped state_dict: raw {layer_name: tensor} (e.g. models/classifier.pt)
+
 Usage:
-    python -m vision_task.precompute_refs --checkpoint experiments/phase4_linear_probe/best.pt
+    python -m vision_task.precompute_refs --checkpoint models/classifier.pt
+    python -m vision_task.precompute_refs --checkpoint experiments/phase5_finetune/best.pt
 """
 
 import argparse
@@ -30,8 +35,8 @@ def parse_args():
     parser.add_argument(
         "--checkpoint",
         type=str,
-        default="experiments/phase4_linear_probe/best.pt",
-        help="Path to trained checkpoint (.pt)",
+        default="models/classifier.pt",
+        help="Path to classifier weights (.pt) — training checkpoint or stripped state_dict",
     )
     parser.add_argument(
         "--output",
@@ -73,13 +78,18 @@ def main():
     logger.info("Loading checkpoint: %s", checkpoint_path)
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
-    model = GroceryEmbedder(freeze_backbone=True)
-    model.load_state_dict(checkpoint["model_state_dict"])
+    # Auto-detect format: training checkpoint (has "model_state_dict" key) vs raw state_dict
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        state_dict = checkpoint["model_state_dict"]
+        if "metrics" in checkpoint:
+            logger.info("Checkpoint metrics: %s", checkpoint["metrics"])
+    else:
+        state_dict = checkpoint
+
+    model = GroceryEmbedder(weights_path=None, freeze_backbone=True)
+    model.load_state_dict(state_dict)
     model = model.to(device)
     model.eval()
-
-    if "metrics" in checkpoint:
-        logger.info("Checkpoint metrics: %s", checkpoint["metrics"])
 
     # --- Load reference dataset ---
     ref_ds = ProductReferenceDataset(

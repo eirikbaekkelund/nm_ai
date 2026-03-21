@@ -121,8 +121,10 @@ def main():
     )
 
     # --- Model ---
+    # Skip loading base DINOv2 weights if resuming (checkpoint has full backbone)
+    effective_weights = None if args.resume else args.weights_path
     model = GroceryEmbedder(
-        weights_path=args.weights_path,
+        weights_path=effective_weights,
         freeze_backbone=True,
     ).to(device)
 
@@ -139,11 +141,19 @@ def main():
             raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
         logger.info("Resuming from checkpoint: %s", ckpt_path)
         ckpt = torch.load(ckpt_path, map_location=device, weights_only=True)
-        model.load_state_dict(ckpt["model_state_dict"])
-        loss_fn.load_state_dict(ckpt["loss_fn_state_dict"])
-        if "metrics" in ckpt:
-            logger.info("Checkpoint metrics: %s", ckpt["metrics"])
-        logger.info("Loaded model + ArcFace weights from epoch %d", ckpt.get("epoch", "?"))
+
+        # Auto-detect format: training checkpoint vs stripped state_dict
+        if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
+            model.load_state_dict(ckpt["model_state_dict"])
+            if "loss_fn_state_dict" in ckpt:
+                loss_fn.load_state_dict(ckpt["loss_fn_state_dict"])
+            if "metrics" in ckpt:
+                logger.info("Checkpoint metrics: %s", ckpt["metrics"])
+            logger.info("Loaded model + ArcFace weights from epoch %d", ckpt.get("epoch", "?"))
+        else:
+            # Raw state_dict (e.g. models/classifier.pt from export_models.py)
+            model.load_state_dict(ckpt)
+            logger.info("Loaded model from stripped state_dict (ArcFace head re-initialized)")
 
     # --- Unfreeze backbone blocks (Phase 5) ---
     if args.unfreeze_blocks > 0:
