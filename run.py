@@ -48,6 +48,10 @@ CROP_BUFFER = 0.05
 UNKNOWN_CATEGORY_ID = 355
 UNKNOWN_THRESHOLD = 0.0
 
+# CAQE — Context-Aware Query Expansion
+CAQE_K = 3
+CAQE_ALPHA = 0.5
+
 _NORM_MEAN = None
 _NORM_STD = None
 
@@ -206,29 +210,51 @@ def extract_and_transform_crops(img_tensor, boxes):
 
 
 @torch.no_grad()
-def classify_crops(crop_tensors, model, ref_embs, ref_ids, device):
-    """Classify crops by cosine similarity to reference embeddings."""
-    category_ids = []
-    cos_scores = []
+def embed_crops(crop_tensors, model, device):
+    """Embed all crops → [N, D] L2-normalized embeddings."""
+    all_embs = []
     n = crop_tensors.shape[0]
-
     for i in range(0, n, CLASSIFY_BATCH):
         batch = crop_tensors[i : i + CLASSIFY_BATCH].to(device)
-
         embs = model(batch)
         embs = F.normalize(embs.float(), dim=1)
-        sim = embs @ ref_embs.T
-        best_scores, best_indices = sim.max(dim=1)
+        all_embs.append(embs)
+    return torch.cat(all_embs, dim=0)
 
-        for j in range(batch.shape[0]):
-            score = best_scores[j].item()
-            if score < UNKNOWN_THRESHOLD:
-                category_ids.append(UNKNOWN_CATEGORY_ID)
-            else:
-                category_ids.append(ref_ids[best_indices[j]].item())
-            cos_scores.append(score)
 
+def match_to_refs(embeddings, ref_embs, ref_ids):
+    """Match [N, D] embeddings to refs → (category_ids, cos_scores)."""
+    sim = embeddings @ ref_embs.T
+    best_scores, best_indices = sim.max(dim=1)
+    category_ids = []
+    cos_scores = []
+    for j in range(embeddings.shape[0]):
+        score = best_scores[j].item()
+        if score < UNKNOWN_THRESHOLD:
+            category_ids.append(UNKNOWN_CATEGORY_ID)
+        else:
+            category_ids.append(ref_ids[best_indices[j]].item())
+        cos_scores.append(score)
     return category_ids, cos_scores
+
+
+def apply_caqe(embeddings, boxes_xyxy, k=CAQE_K, alpha=CAQE_ALPHA):
+    """Context-Aware Query Expansion — inline for sandbox (no extra imports)."""
+    n = embeddings.shape[0]
+    if n <= 1 or alpha >= 1.0:
+        return embeddings
+    eff_k = min(k, n - 1)
+    centroids = torch.stack([
+        (boxes_xyxy[:, 0] + boxes_xyxy[:, 2]) / 2,
+        (boxes_xyxy[:, 1] + boxes_xyxy[:, 3]) / 2,
+    ], dim=1)
+    dists = torch.cdist(centroids.unsqueeze(0).float(), centroids.unsqueeze(0).float()).squeeze(0)
+    dists.fill_diagonal_(float("inf"))
+    _, nn_indices = dists.topk(eff_k, dim=1, largest=False)
+    neighbor_embs = embeddings[nn_indices]
+    neighbor_mean = neighbor_embs.mean(dim=1)
+    expanded = alpha * embeddings + (1 - alpha) * neighbor_mean
+    return F.normalize(expanded, dim=1)
 
 
 def image_id_from_filename(filename):
@@ -318,7 +344,7 @@ def main():
             del img_tensor
             continue
 
-        # Classify crops
+        # Classify crops: embed → CAQE → match
         crop_tensors, valid_indices = extract_and_transform_crops(
             img_tensor,
             boxes_xyxy,
@@ -331,14 +357,15 @@ def main():
         # Convert crops to FP16 to match model dtype
         crop_tensors = crop_tensors.half()
 
-        cat_ids, cos_scores = classify_crops(
-            crop_tensors,
-            cls_model,
-            ref_embs,
-            ref_ids,
-            device,
-        )
+        embeddings = embed_crops(crop_tensors, cls_model, device)
         del crop_tensors
+
+        # CAQE: expand embeddings with spatial neighbors
+        valid_boxes = boxes_xyxy[valid_indices]
+        embeddings = apply_caqe(embeddings, valid_boxes, CAQE_K, CAQE_ALPHA)
+
+        cat_ids, cos_scores = match_to_refs(embeddings, ref_embs, ref_ids)
+        del embeddings
 
         for j, vi in enumerate(valid_indices):
             x1, y1, x2, y2 = boxes_xyxy[vi].tolist()

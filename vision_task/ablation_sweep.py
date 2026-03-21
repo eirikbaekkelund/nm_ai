@@ -35,6 +35,7 @@ from PIL import Image
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
+from vision_task.caqe import apply_caqe
 from vision_task.config import CROP_BUFFER
 from vision_task.data.transforms import get_eval_transform
 from vision_task.predict import image_id_from_filename, load_classifier
@@ -52,6 +53,8 @@ BASELINE = {
     "knn_k": 1,
     "query_tta": False,
     "unknown_threshold": 0.0,
+    "caqe_k": 0,
+    "caqe_alpha": 0.5,
 }
 
 # Sweep grid
@@ -61,6 +64,8 @@ SWEEP_GRID = {
     "knn_k": [1, 3, 5],
     "query_tta": [False, True],
     "unknown_threshold": [0.0, 0.2, 0.3, 0.4, 0.5],
+    "caqe_k": [0, 2, 3, 5],
+    "caqe_alpha": [0.3, 0.5, 0.7],
 }
 
 
@@ -71,6 +76,8 @@ class SweepConfig:
     knn_k: int = 1
     query_tta: bool = False
     unknown_threshold: float = 0.0
+    caqe_k: int = 0
+    caqe_alpha: float = 0.5
 
     def label(self) -> str:
         parts = []
@@ -84,6 +91,10 @@ class SweepConfig:
             parts.append("tta=True")
         if self.unknown_threshold != BASELINE["unknown_threshold"]:
             parts.append(f"unk={self.unknown_threshold}")
+        if self.caqe_k != BASELINE["caqe_k"]:
+            parts.append(f"caqe_k={self.caqe_k}")
+        if self.caqe_alpha != BASELINE["caqe_alpha"]:
+            parts.append(f"caqe_a={self.caqe_alpha}")
         return ", ".join(parts) if parts else "baseline"
 
 
@@ -507,6 +518,11 @@ class EmbeddingStore:
             kept_embs = embs[torch.tensor(keep_mask, dtype=torch.bool)]
             kept_vi = [vi for vi, keep in zip(valid_indices, keep_mask) if keep]
 
+            # CAQE: expand embeddings with spatial neighbors
+            if config.caqe_k > 0 and kept_embs.shape[0] > 1:
+                kept_boxes = torch.from_numpy(boxes[np.array(kept_vi)]).to(kept_embs.device)
+                kept_embs = apply_caqe(kept_embs, kept_boxes, k=config.caqe_k, alpha=config.caqe_alpha)
+
             # Classify (just matching — no DINOv2 forward pass)
             cat_ids, cos_scores = classify_knn(
                 kept_embs, self._ref_embs, self._ref_ids,
@@ -584,7 +600,8 @@ def print_results_table(results: list):
 
     header = (
         f"{'#':>3} | {'det_conf':>8} | {'scales':>17} | {'knn':>3} | {'q_tta':>5} | "
-        f"{'unk_thr':>7} | {'det_mAP50':>9} | {'cls_mAP50':>9} | {'combined':>8} | {'n_preds':>7}"
+        f"{'unk_thr':>7} | {'caqe_k':>6} | {'caqe_a':>6} | "
+        f"{'det_mAP50':>9} | {'cls_mAP50':>9} | {'combined':>8} | {'n_preds':>7}"
     )
     sep = "-" * len(header)
 
@@ -601,6 +618,7 @@ def print_results_table(results: list):
         print(
             f"{i+1:>3} | {cfg['det_conf']:>8.2f} | {scales_str:>17} | {cfg['knn_k']:>3} | "
             f"{str(cfg['query_tta']):>5} | {cfg['unknown_threshold']:>7.2f} | "
+            f"{cfg.get('caqe_k', 0):>6} | {cfg.get('caqe_alpha', 0.5):>6.1f} | "
             f"{m['det_mAP50']:>9.4f} | {m['cls_mAP50']:>9.4f} | {m['combined']:>8.4f} | "
             f"{m['n_preds']:>7}"
         )

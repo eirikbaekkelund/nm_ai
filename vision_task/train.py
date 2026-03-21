@@ -77,6 +77,17 @@ def parse_args():
         default=0,
         help="Number of backbone blocks to unfreeze (0=frozen/Phase4, 2=Phase5a, 4=Phase5b)",
     )
+    # Hard-negative mining
+    parser.add_argument("--hard_negatives", action="store_true", help="Enable hard-negative mining")
+    parser.add_argument("--hn_boost", type=float, default=3.0, help="Sampler boost for confusing categories")
+    parser.add_argument("--hn_gamma", type=float, default=0.5, help="Hard-negative loss weight")
+    parser.add_argument("--hn_margin", type=float, default=0.3, help="Contrastive margin for confusing pairs")
+    parser.add_argument(
+        "--diagnosis_path",
+        type=str,
+        default=None,
+        help="Path to diagnosis_report.json (auto-detected if not set)",
+    )
     args = parser.parse_args()
     if args.batch_size is None:
         args.batch_size = _auto_batch_size()
@@ -186,10 +197,47 @@ def main():
     optimizer = torch.optim.AdamW(param_groups, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
+    # --- Hard-negative mining setup ---
+    confusion_pairs = None
+    if args.hard_negatives:
+        from vision_task.hard_negatives import load_confusion_pairs, FALLBACK_CONFUSION_PAIRS
+
+        if args.diagnosis_path:
+            diagnosis_path = args.diagnosis_path
+        else:
+            # Auto-detect: look for diagnosis_report.json in common locations
+            candidates = [
+                Path("experiments/diagnostics/diagnosis_report.json"),
+                Path("experiments/phase6_augmented/diagnosis_report.json"),
+            ]
+            diagnosis_path = None
+            for c in candidates:
+                if c.exists():
+                    diagnosis_path = str(c)
+                    break
+
+        if diagnosis_path:
+            try:
+                confusion_pairs = load_confusion_pairs(diagnosis_path, min_count=3)
+                logger.info("Loaded %d confusion pairs from %s", len(confusion_pairs), diagnosis_path)
+            except Exception as e:
+                logger.warning("Failed to load confusion pairs: %s. Using fallback.", e)
+                confusion_pairs = FALLBACK_CONFUSION_PAIRS
+        else:
+            logger.info("No diagnosis report found, using fallback confusion pairs")
+            confusion_pairs = FALLBACK_CONFUSION_PAIRS
+
+        logger.info(
+            "Hard-negative mining: boost=%.1f, gamma=%.2f, margin=%.2f, %d pairs",
+            args.hn_boost, args.hn_gamma, args.hn_margin, len(confusion_pairs),
+        )
+
     # --- Data ---
     train_loader, val_loader = create_dataloaders(
         batch_size=args.batch_size,
         num_workers=args.num_workers,
+        confusion_pairs=confusion_pairs,
+        hn_boost=args.hn_boost if args.hard_negatives else None,
     )
     logger.info("Train batches: %d, Val batches: %d", len(train_loader), len(val_loader))
 
@@ -260,7 +308,16 @@ def main():
             else:
                 embeddings = model(images).float()
 
-            loss = loss_fn(embeddings, labels)
+            arcface_loss = loss_fn(embeddings, labels)
+
+            # Hard-negative contrastive loss
+            if args.hard_negatives and confusion_pairs:
+                from vision_task.hard_negatives import hard_negative_loss
+                hn_loss = hard_negative_loss(embeddings, labels, confusion_pairs, margin=args.hn_margin)
+                loss = arcface_loss + args.hn_gamma * hn_loss
+            else:
+                loss = arcface_loss
+
             loss.backward()
             optimizer.step()
 

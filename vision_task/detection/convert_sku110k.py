@@ -38,8 +38,14 @@ def sku110k_to_yolo(x1, y1, x2, y2, img_w, img_h):
     return cx, cy, w, h
 
 
-def convert_split(csv_path, image_dir, out_dir, split):
-    """Convert one CSV split to YOLO format."""
+def convert_split(csv_path, image_dir, out_dir, split, max_images=0, seed=42):
+    """Convert one CSV split to YOLO format.
+
+    Args:
+        max_images: if > 0, randomly sample this many images from the split.
+    """
+    import random
+
     (out_dir / "images" / split).mkdir(parents=True, exist_ok=True)
     (out_dir / "labels" / split).mkdir(parents=True, exist_ok=True)
 
@@ -61,10 +67,18 @@ def convert_split(csv_path, image_dir, out_dir, split):
             image_anns[img_name].append((x1, y1, x2, y2))
             image_dims[img_name] = (img_w, img_h)
 
+    # Subset selection
+    all_image_names = list(image_anns.keys())
+    if max_images > 0 and max_images < len(all_image_names):
+        rng = random.Random(seed)
+        all_image_names = rng.sample(all_image_names, max_images)
+        print(f"  Subset: {max_images}/{len(image_anns)} images selected")
+
     n_images = 0
     n_boxes = 0
 
-    for img_name, anns in image_anns.items():
+    for img_name in all_image_names:
+        anns = image_anns[img_name]
         img_w, img_h = image_dims[img_name]
         stem = Path(img_name).stem
 
@@ -91,6 +105,19 @@ def convert_split(csv_path, image_dir, out_dir, split):
 
 
 def main():
+    import argparse
+    import random
+
+    parser = argparse.ArgumentParser(description="Convert SKU-110K to YOLO format")
+    parser.add_argument(
+        "--max_images",
+        type=int,
+        default=0,
+        help="Max images per split (0=all). Saves disk space on small volumes.",
+    )
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for subset selection")
+    args = parser.parse_args()
+
     root = Path(__file__).resolve().parents[2]
     sku_dir = root / "data" / "sku110k"
     out_dir = root / "data" / "sku110k_yolo"
@@ -118,13 +145,15 @@ def main():
             continue
 
         print(f"Converting {split} split from {csv_path} ...")
-        n_images, n_boxes = convert_split(csv_path, image_dir, out_dir, split)
+        n_images, n_boxes = convert_split(csv_path, image_dir, out_dir, split, args.max_images, args.seed)
         print(f"  {n_images} images, {n_boxes} boxes")
         total_images += n_images
         total_boxes += n_boxes
 
     print(f"\nDone! Output: {out_dir}")
     print(f"  Total: {total_images} images, {total_boxes} boxes")
+    if args.max_images > 0:
+        print(f"  (subset: max {args.max_images} images per split)")
 
     yaml_path = Path(__file__).parent / "sku110k.yaml"
     print(f"\nYAML config: {yaml_path}")

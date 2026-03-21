@@ -30,6 +30,7 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
+from vision_task.caqe import apply_caqe
 from vision_task.config import CROP_BUFFER, DETECTOR_IMGSZ
 from vision_task.data.transforms import get_eval_transform
 from vision_task.embedder import GroceryEmbedder
@@ -58,6 +59,10 @@ def parse_args():
     p.add_argument("--classify_batch", type=int, default=128)
     p.add_argument("--device", type=str, default="cuda:0")
     p.add_argument("--max_images", type=int, default=0, help="Max images to process (0=all)")
+    # CAQE
+    p.add_argument("--caqe", action="store_true", help="Enable Context-Aware Query Expansion")
+    p.add_argument("--caqe_k", type=int, default=3, help="CAQE: number of spatial neighbors")
+    p.add_argument("--caqe_alpha", type=float, default=0.5, help="CAQE: weight on original embedding")
     # Visualization
     p.add_argument("--visualize", action="store_true", help="Draw predictions on images")
     p.add_argument("--vis_dir", type=str, default="experiments/visualizations")
@@ -86,38 +91,32 @@ def image_id_from_filename(filename):
 
 
 @torch.no_grad()
-def classify_crops(crop_images, model, ref_embs, ref_ids, device, batch_size=128):
-    """Classify PIL crop images via cosine similarity to reference embeddings.
-
-    Args:
-        crop_images: list of PIL.Image crops
-        model: GroceryEmbedder on device
-        ref_embs: [C, 768] L2-normalized reference embeddings
-        ref_ids: [C] category IDs
-    Returns:
-        category_ids: list[int], cos_scores: list[float]
-    """
+def embed_crop_images(crop_images, model, device, batch_size=128):
+    """Embed PIL crop images → [N, D] L2-normalized embeddings."""
     transform = get_eval_transform()
-    category_ids = []
-    cos_scores = []
-
+    all_embs = []
     for i in range(0, len(crop_images), batch_size):
         batch_pil = crop_images[i : i + batch_size]
         batch = torch.stack([transform(img) for img in batch_pil]).to(device)
-
         embs = model(batch)
         embs = F.normalize(embs.float(), dim=1)
-        sim = embs @ ref_embs.T
-        best_scores, best_indices = sim.max(dim=1)
+        all_embs.append(embs)
+    return torch.cat(all_embs, dim=0)
 
-        for j in range(len(batch_pil)):
-            score = best_scores[j].item()
-            if score < UNKNOWN_THRESHOLD:
-                category_ids.append(UNKNOWN_CATEGORY_ID)
-            else:
-                category_ids.append(ref_ids[best_indices[j]].item())
-            cos_scores.append(score)
 
+def match_to_refs(embeddings, ref_embs, ref_ids):
+    """Match [N, D] embeddings to refs → (category_ids, cos_scores)."""
+    sim = embeddings @ ref_embs.T
+    best_scores, best_indices = sim.max(dim=1)
+    category_ids = []
+    cos_scores = []
+    for j in range(embeddings.shape[0]):
+        score = best_scores[j].item()
+        if score < UNKNOWN_THRESHOLD:
+            category_ids.append(UNKNOWN_CATEGORY_ID)
+        else:
+            category_ids.append(ref_ids[best_indices[j]].item())
+        cos_scores.append(score)
     return category_ids, cos_scores
 
 
@@ -209,8 +208,14 @@ def main():
         if not crop_images:
             continue
 
-        # Classify
-        cat_ids, cos_scores = classify_crops(crop_images, cls_model, ref_embs, ref_ids, device, args.classify_batch)
+        # Embed → CAQE → Match
+        embeddings = embed_crop_images(crop_images, cls_model, device, args.classify_batch)
+
+        if args.caqe and len(valid_indices) > 1:
+            valid_boxes = det_boxes[valid_indices]  # [M, 4] xyxy
+            embeddings = apply_caqe(embeddings, valid_boxes, k=args.caqe_k, alpha=args.caqe_alpha)
+
+        cat_ids, cos_scores = match_to_refs(embeddings, ref_embs, ref_ids)
 
         for j, vi in enumerate(valid_indices):
             x1, y1, x2, y2 = det_boxes[vi].tolist()

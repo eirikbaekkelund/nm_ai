@@ -55,7 +55,65 @@ def parse_args():
         default="yolo11x.pt",
         help="Starting weights (yolo11x.pt, yolo26x.pt, yolo26x-p2.pt, rtdetr-x.pt)",
     )
+    p.add_argument(
+        "--sku110k_subset",
+        type=float,
+        default=1.0,
+        help="Fraction of SKU-110K images to use (0.5 = 50%%). Saves disk space.",
+    )
     return p.parse_args()
+
+
+def _apply_sku110k_subset(sku_yolo_dir, fraction):
+    """Subsample SKU-110K training images by moving extras to a _held_out dir.
+
+    Only affects the 'train' split. Val is kept intact for fair evaluation.
+    """
+    import os
+    import random
+
+    train_img_dir = sku_yolo_dir / "images" / "train"
+    train_lbl_dir = sku_yolo_dir / "labels" / "train"
+    held_img_dir = sku_yolo_dir / "images" / "_train_held_out"
+    held_lbl_dir = sku_yolo_dir / "labels" / "_train_held_out"
+
+    # Restore any previously held-out images first
+    for held, orig in [(held_img_dir, train_img_dir), (held_lbl_dir, train_lbl_dir)]:
+        if held.exists():
+            for f in held.iterdir():
+                dest = orig / f.name
+                if not dest.exists():
+                    os.rename(str(f), str(dest))
+            # Clean up empty dirs
+            try:
+                held.rmdir()
+            except OSError:
+                pass
+
+    # Now subsample
+    images = sorted(f for f in train_img_dir.iterdir() if f.suffix.lower() in (".jpg", ".jpeg", ".png"))
+    n_keep = max(1, int(len(images) * fraction))
+    n_remove = len(images) - n_keep
+
+    if n_remove <= 0:
+        return
+
+    rng = random.Random(42)
+    to_remove = set(rng.sample(range(len(images)), n_remove))
+
+    held_img_dir.mkdir(parents=True, exist_ok=True)
+    held_lbl_dir.mkdir(parents=True, exist_ok=True)
+
+    moved = 0
+    for i in to_remove:
+        img_path = images[i]
+        lbl_path = train_lbl_dir / (img_path.stem + ".txt")
+        os.rename(str(img_path), str(held_img_dir / img_path.name))
+        if lbl_path.exists():
+            os.rename(str(lbl_path), str(held_lbl_dir / lbl_path.name))
+        moved += 1
+
+    print(f"SKU-110K subset: kept {n_keep}/{len(images)} images, moved {moved} to _held_out")
 
 
 def train_sku110k(args):
@@ -66,6 +124,10 @@ def train_sku110k(args):
         print("Run: python -m vision_task.detection.convert_sku110k")
         sys.exit(1)
 
+    # Subset: remove random images from training split if requested
+    if args.sku110k_subset < 1.0:
+        _apply_sku110k_subset(sku_yolo_dir, args.sku110k_subset)
+
     yaml_path = resolve_yaml(Path(__file__).parent / "sku110k.yaml")
     print(f"\n{'='*60}")
     print(f"Stage 1: SKU-110K Pretraining")
@@ -74,6 +136,8 @@ def train_sku110k(args):
     print(f"  Epochs: {args.sku110k_epochs}")
     print(f"  Batch:  {args.batch_sku}")
     print(f"  Imgsz:  {args.imgsz}")
+    if args.sku110k_subset < 1.0:
+        print(f"  Subset: {args.sku110k_subset*100:.0f}% of images")
     print(f"{'='*60}\n")
 
     model = YOLO(args.base_model)

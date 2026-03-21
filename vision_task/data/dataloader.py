@@ -25,11 +25,18 @@ def create_dataloaders(
     batch_size=DEFAULT_BATCH_SIZE,
     num_workers=8,
     exclude_unknown=True,
+    confusion_pairs=None,
+    hn_boost=None,
 ):
     """Create training and validation dataloaders.
 
     Train: shelf crops (train split) + reference images, balanced sampler, drop_last=True
     Val: shelf crops (val split) only, sequential, no sampling
+
+    Args:
+        confusion_pairs: if set, use HardNegativeSampler instead of BalancedConcatSampler.
+            List of (cat_a, cat_b, count) tuples.
+        hn_boost: boost factor for HardNegativeSampler (default 3.0).
 
     Returns:
         (train_loader, val_loader)
@@ -62,13 +69,25 @@ def create_dataloaders(
     # Concatenate shelf train + reference for training
     train_ds = ConcatDataset([shelf_train, ref_ds])
 
-    # Balanced sampler
-    sampler = BalancedConcatSampler(
-        shelf_labels=shelf_train.labels,
-        ref_labels=ref_ds.labels,
-        shelf_ratio=0.7,
-        epoch_size=len(shelf_train),
-    )
+    # Sampler: hard-negative or balanced
+    if confusion_pairs is not None:
+        from vision_task.hard_negatives import HardNegativeSampler
+
+        sampler = HardNegativeSampler(
+            shelf_labels=shelf_train.labels,
+            ref_labels=ref_ds.labels,
+            confusion_pairs=confusion_pairs,
+            boost_factor=hn_boost or 3.0,
+            shelf_ratio=0.7,
+            epoch_size=len(shelf_train),
+        )
+    else:
+        sampler = BalancedConcatSampler(
+            shelf_labels=shelf_train.labels,
+            ref_labels=ref_ds.labels,
+            shelf_ratio=0.7,
+            epoch_size=len(shelf_train),
+        )
 
     worker_kwargs = {}
     if num_workers > 0:
