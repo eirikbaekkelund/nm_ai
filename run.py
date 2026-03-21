@@ -228,9 +228,7 @@ def embed_crops(crop_tensors, model, device):
     for i in range(0, n, CLASSIFY_BATCH):
         batch = crop_tensors[i : i + CLASSIFY_BATCH].to(device)
         embs = model(batch)
-        # FP16 safety: ViT attention can overflow to Inf in half precision
-        embs = torch.nan_to_num(embs.float(), nan=0.0, posinf=1e4, neginf=-1e4)
-        embs = F.normalize(embs, dim=1)
+        embs = F.normalize(embs.float(), dim=1)
         all_embs.append(embs)
     return torch.cat(all_embs, dim=0)
 
@@ -433,7 +431,7 @@ def main():
     cls_model = GroceryEmbedder()
     sd = torch.load(str(CLASSIFIER_WEIGHTS), map_location="cpu", weights_only=True)
     cls_model.load_state_dict(sd)
-    cls_model = cls_model.half().to(device).eval()
+    cls_model = cls_model.to(device).eval()
 
     # Load reference embeddings
     ref_data = torch.load(str(REF_EMBEDDINGS), map_location=device, weights_only=True)
@@ -476,8 +474,7 @@ def main():
         if crop_tensors is None:
             continue
 
-        # Convert crops to FP16 to match model dtype
-        crop_tensors = crop_tensors.half()
+        # Crops are float32, matching model dtype
 
         embeddings = embed_crops(crop_tensors, cls_model, device)
         del crop_tensors
