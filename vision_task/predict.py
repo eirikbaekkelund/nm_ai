@@ -33,6 +33,8 @@ from PIL import Image
 from torchvision.transforms import InterpolationMode
 from torchvision.transforms.functional import center_crop, resize
 
+from ensemble_boxes import weighted_boxes_fusion
+
 from vision_task.caqe import apply_caqe
 from vision_task.config import (
     CLASSIFIER_RESIZE,
@@ -51,6 +53,12 @@ ROOT = Path(__file__).resolve().parents[1]
 UNKNOWN_CATEGORY_ID = 355
 UNKNOWN_THRESHOLD = 0.0
 
+# SAHI defaults
+TILE_SIZE = 640
+TILE_OVERLAP = 0.25
+MIN_DIM_FOR_TILING = 2000
+WBF_IOU_THR = 0.55
+
 
 def parse_args():
     p = argparse.ArgumentParser(description="Local inference (native YOLO + DINOv2)")
@@ -68,6 +76,11 @@ def parse_args():
     p.add_argument("--classify_batch", type=int, default=128)
     p.add_argument("--device", type=str, default="cuda:0")
     p.add_argument("--max_images", type=int, default=0, help="Max images to process (0=all)")
+    # SAHI
+    p.add_argument("--sahi", action="store_true", help="Enable SAHI tiled inference")
+    p.add_argument("--tile_size", type=int, default=TILE_SIZE, help="SAHI tile size")
+    p.add_argument("--tile_overlap", type=float, default=TILE_OVERLAP, help="SAHI tile overlap ratio")
+    p.add_argument("--wbf_iou", type=float, default=WBF_IOU_THR, help="WBF IoU threshold")
     # CAQE
     p.add_argument("--caqe", action="store_true", help="Enable Context-Aware Query Expansion")
     p.add_argument("--caqe_k", type=int, default=3, help="CAQE: number of spatial neighbors")
@@ -173,6 +186,92 @@ def match_to_refs(embeddings, ref_embs, ref_ids):
     return matched_cats.tolist(), best_scores.tolist()
 
 
+def generate_tiles(img_h, img_w, tile_size=TILE_SIZE, overlap=TILE_OVERLAP):
+    """Generate (x1, y1, x2, y2) tile coordinates with overlap."""
+    stride = int(tile_size * (1 - overlap))
+    tiles = []
+    for y in range(0, img_h, stride):
+        for x in range(0, img_w, stride):
+            x2 = min(x + tile_size, img_w)
+            y2 = min(y + tile_size, img_h)
+            x1 = max(0, x2 - tile_size)
+            y1 = max(0, y2 - tile_size)
+            tiles.append((x1, y1, x2, y2))
+    return list(dict.fromkeys(tiles))
+
+
+def detect_with_sahi(yolo, img_path, img_np, orig_h, orig_w, device, args):
+    """Full-image + tiled SAHI detection via ultralytics, merged with WBF."""
+    # Pass 1: full-image
+    results = yolo.predict(
+        source=str(img_path), conf=args.detect_conf, imgsz=DETECTOR_IMGSZ,
+        device=device, half=True, verbose=False,
+    )
+    if results and len(results[0].boxes) > 0:
+        full_boxes = results[0].boxes.xyxy.cpu().numpy()
+        full_scores = results[0].boxes.conf.cpu().numpy()
+    else:
+        full_boxes = np.empty((0, 4), dtype=np.float32)
+        full_scores = np.empty((0,), dtype=np.float32)
+
+    # Skip tiling for small images
+    if max(orig_h, orig_w) <= MIN_DIM_FOR_TILING:
+        return (torch.from_numpy(full_boxes).float(),
+                torch.from_numpy(full_scores).float())
+
+    # Pass 2: tiled detection
+    tiles = generate_tiles(orig_h, orig_w, args.tile_size, args.tile_overlap)
+    all_boxes = [full_boxes]
+    all_scores = [full_scores]
+
+    for tx1, ty1, tx2, ty2 in tiles:
+        tile_np = img_np[ty1:ty2, tx1:tx2]
+        tres = yolo.predict(
+            source=tile_np, conf=args.detect_conf, imgsz=DETECTOR_IMGSZ,
+            device=device, half=True, verbose=False,
+        )
+        if tres and len(tres[0].boxes) > 0:
+            tboxes = tres[0].boxes.xyxy.cpu().numpy()
+            tscores = tres[0].boxes.conf.cpu().numpy()
+            # Remap tile-local coords to original image coords
+            tboxes[:, [0, 2]] += tx1
+            tboxes[:, [1, 3]] += ty1
+            tboxes[:, [0, 2]] = np.clip(tboxes[:, [0, 2]], 0, orig_w)
+            tboxes[:, [1, 3]] = np.clip(tboxes[:, [1, 3]], 0, orig_h)
+            all_boxes.append(tboxes)
+            all_scores.append(tscores)
+        else:
+            all_boxes.append(np.empty((0, 4), dtype=np.float32))
+            all_scores.append(np.empty((0,), dtype=np.float32))
+
+    # Merge via WBF (expects [0,1]-normalized coords)
+    boxes_list, scores_list, labels_list = [], [], []
+    for b, s in zip(all_boxes, all_scores):
+        if len(b) == 0:
+            boxes_list.append(np.empty((0, 4), dtype=np.float32))
+            scores_list.append(np.empty((0,), dtype=np.float32))
+            labels_list.append(np.empty((0,), dtype=np.float32))
+            continue
+        nb = b.copy().astype(np.float32)
+        nb[:, [0, 2]] /= orig_w
+        nb[:, [1, 3]] /= orig_h
+        nb = np.clip(nb, 0, 1)
+        boxes_list.append(nb)
+        scores_list.append(s.astype(np.float32))
+        labels_list.append(np.zeros(len(s), dtype=np.float32))
+
+    if all(len(b) == 0 for b in boxes_list):
+        return (torch.empty((0, 4)), torch.empty((0,)))
+
+    fb, fs, _ = weighted_boxes_fusion(
+        boxes_list, scores_list, labels_list,
+        iou_thr=args.wbf_iou, skip_box_thr=0.0,
+    )
+    fb[:, [0, 2]] *= orig_w
+    fb[:, [1, 3]] *= orig_h
+    return (torch.from_numpy(fb).float(), torch.from_numpy(fs).float())
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     logging.basicConfig(
@@ -229,19 +328,32 @@ def main():
         img = Image.open(img_path).convert("RGB")
         orig_w, orig_h = img.size
 
-        # YOLO detection (native ultralytics handles letterbox internally)
+        # YOLO detection
         t_det = time.time()
-        results = yolo.predict(
-            source=str(img_path),
-            conf=args.detect_conf,
-            imgsz=DETECTOR_IMGSZ,
-            device=device,
-            half=True,
-            verbose=False,
-        )
+        img_np_arr = np.array(img)
+
+        if args.sahi:
+            det_boxes, det_scores = detect_with_sahi(
+                yolo, img_path, img_np_arr, orig_h, orig_w, device, args
+            )
+        else:
+            results = yolo.predict(
+                source=str(img_path),
+                conf=args.detect_conf,
+                imgsz=DETECTOR_IMGSZ,
+                device=device,
+                half=True,
+                verbose=False,
+            )
+            if not results or len(results[0].boxes) == 0:
+                det_boxes = torch.empty((0, 4))
+                det_scores = torch.empty((0,))
+            else:
+                det_boxes = results[0].boxes.xyxy.cpu()
+                det_scores = results[0].boxes.conf.cpu()
         dt_det = time.time() - t_det
 
-        if not results or len(results[0].boxes) == 0:
+        if det_boxes.shape[0] == 0:
             if (img_idx + 1) % 50 == 0 or img_idx == 0:
                 logger.info(
                     "  [%d/%d] %s: 0 detections (det=%.2fs)",
@@ -249,14 +361,11 @@ def main():
                 )
             continue
 
-        boxes = results[0].boxes
-        det_boxes = boxes.xyxy.cpu()  # [N, 4] x1,y1,x2,y2
-        det_scores = boxes.conf.cpu()  # [N]
         total_detections += det_boxes.shape[0]
 
         # GPU-side crop + transform (same approach as run.py)
         t_crop = time.time()
-        img_tensor = torch.from_numpy(np.array(img)).permute(2, 0, 1).to(
+        img_tensor = torch.from_numpy(img_np_arr).permute(2, 0, 1).to(
             device=device, dtype=torch.float32
         ).div_(255.0)
         crop_tensors, valid_indices = extract_and_transform_crops(
