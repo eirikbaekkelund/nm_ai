@@ -102,7 +102,7 @@ def load_classifier(weights_path, device):
         state_dict = ckpt
     model = GroceryEmbedder(weights_path=None, freeze_backbone=True)
     model.load_state_dict(state_dict)
-    model = model.to(device).half().eval()
+    model = model.to(device).eval()
     return model
 
 
@@ -166,11 +166,9 @@ def embed_crops(crop_tensors, model, device, batch_size=128):
     all_embs = []
     n = crop_tensors.shape[0]
     for i in range(0, n, batch_size):
-        batch = crop_tensors[i : i + batch_size].to(device, dtype=torch.float16)
+        batch = crop_tensors[i : i + batch_size].to(device)
         embs = model(batch)
-        # FP16 safety: ViT attention can overflow to Inf in half precision
-        embs = torch.nan_to_num(embs.float(), nan=0.0, posinf=1e4, neginf=-1e4)
-        embs = F.normalize(embs, dim=1)
+        embs = F.normalize(embs.float(), dim=1)
         all_embs.append(embs)
     return torch.cat(all_embs, dim=0)
 

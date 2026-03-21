@@ -282,17 +282,11 @@ def main():
     yolo_sess = ort.InferenceSession(str(YOLO_WEIGHTS), providers=providers)
     yolo_input_name = yolo_sess.get_inputs()[0].name
 
-    # Probe YOLO output shape to determine input dtype
-    probe_input = np.zeros((1, 3, DETECTOR_IMGSZ, DETECTOR_IMGSZ), dtype=np.float16)
-    try:
-        probe_out = yolo_sess.run(None, {yolo_input_name: probe_input})[0]
-        yolo_input_dtype = np.float16
-    except Exception:
-        probe_input = np.zeros((1, 3, DETECTOR_IMGSZ, DETECTOR_IMGSZ), dtype=np.float32)
-        probe_out = yolo_sess.run(None, {yolo_input_name: probe_input})[0]
-        yolo_input_dtype = np.float32
+    # Probe YOLO output shape to auto-detect version
+    probe_input = np.zeros((1, 3, DETECTOR_IMGSZ, DETECTOR_IMGSZ), dtype=np.float32)
+    probe_out = yolo_sess.run(None, {yolo_input_name: probe_input})[0]
     yolo_version = "YOLO26" if probe_out.shape[-1] == 6 else "YOLO11"
-    print(f"YOLO: {yolo_version}, input dtype: {yolo_input_dtype}, output shape: {probe_out.shape}")
+    print(f"YOLO: {yolo_version}, output shape: {probe_out.shape}")
     del probe_out
 
     # Load native DINOv2 classifier
@@ -322,7 +316,7 @@ def main():
 
         # Single-pass detection at 1280
         lb_tensor, scale, pad_x, pad_y = letterbox(img_tensor, DETECTOR_IMGSZ)
-        lb_np = lb_tensor.unsqueeze(0).cpu().numpy().astype(yolo_input_dtype)
+        lb_np = lb_tensor.unsqueeze(0).cpu().numpy()
         yolo_out_np = yolo_sess.run(None, {yolo_input_name: lb_np})[0]
         yolo_out = torch.from_numpy(yolo_out_np).to(device)
         boxes_xyxy, det_scores = yolo_postprocess(
