@@ -124,11 +124,23 @@ def parse_args():
         default=True,
         help="Exclude category 355 (unknown_product) from mined refs",
     )
-    return p.parse_args()
+    p.add_argument(
+        "--centroid_only",
+        action="store_true",
+        help="Only add shelf crop centroid per category (no individual crops). "
+        "Overrides --k_per_cat and --k_no_ref to 0.",
+    )
+    args = p.parse_args()
+    if args.centroid_only:
+        args.k_per_cat = 0
+        args.k_no_ref = 0
+    return args
 
 
 def select_centroid(embeddings, k):
     """Select top K embeddings closest to class centroid."""
+    if k <= 0:
+        return embeddings[:0]  # Empty tensor with correct shape [0, D]
     centroid = F.normalize(embeddings.mean(dim=0, keepdim=True), dim=1)
     sims = (embeddings @ centroid.T).squeeze(1)
     k = min(k, embeddings.shape[0])
@@ -139,6 +151,8 @@ def select_centroid(embeddings, k):
 def select_diverse(embeddings, k):
     """Select K embeddings via farthest-first traversal (maximizes diversity)."""
     k = min(k, embeddings.shape[0])
+    if k <= 0:
+        return embeddings[:0]  # Empty tensor with correct shape [0, D]
     if k <= 1:
         return embeddings[:k]
 
@@ -251,7 +265,7 @@ def main():
         has_product_refs = cat_id in product_ref_cats
         k = args.k_per_cat if has_product_refs else args.k_no_ref
 
-        if args.selection == "confirmed" and has_product_refs and cat_id in ref_cat_embs:
+        if k > 0 and args.selection == "confirmed" and has_product_refs and cat_id in ref_cat_embs:
             # CONFIRMED selection: score each shelf crop by max-sim to product refs
             # Only keep crops that the model confidently matches to this product
             cat_refs = ref_cat_embs[cat_id]  # [n_ref, 768]
