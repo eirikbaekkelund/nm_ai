@@ -46,9 +46,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 UNKNOWN_CATEGORY_ID = 355
 
-# Baseline values
+# Baseline values (updated from previous sweep winners)
 BASELINE = {
-    "det_conf": 0.25,
+    "det_conf": 0.05,
     "scales": [1280],
     "knn_k": 1,
     "query_tta": False,
@@ -57,13 +57,14 @@ BASELINE = {
     "caqe_alpha": 0.5,
 }
 
-# Sweep grid
+# Sweep grid — only axes with unexplored values
+# Previously settled: det_conf=0.05, scales=[1280], unknown_threshold=0.0
 SWEEP_GRID = {
-    "det_conf": [0.05, 0.10, 0.15, 0.20, 0.25, 0.30],
-    "scales": [[1280], [1024, 1280, 1536]],
+    "det_conf": [0.05],
+    "scales": [[1280]],
     "knn_k": [1, 3, 5],
     "query_tta": [False, True],
-    "unknown_threshold": [0.0, 0.2, 0.3, 0.4, 0.5],
+    "unknown_threshold": [0.0],
     "caqe_k": [0, 2, 3, 5],
     "caqe_alpha": [0.3, 0.5, 0.7],
 }
