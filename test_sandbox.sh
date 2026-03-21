@@ -55,7 +55,11 @@ if [ ! -f "$SCRIPT_DIR/submission.zip" ]; then
 fi
 
 mkdir -p "$SUBMISSION_DIR"
-unzip -q "$SCRIPT_DIR/submission.zip" -d "$SUBMISSION_DIR"
+python3 -c "
+import zipfile
+with zipfile.ZipFile('$SCRIPT_DIR/submission.zip', 'r') as z:
+    z.extractall('$SUBMISSION_DIR')
+"
 
 if [ -f "$SUBMISSION_DIR/run.py" ]; then
     pass "run.py found at zip root"
