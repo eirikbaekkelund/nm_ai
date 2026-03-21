@@ -32,7 +32,7 @@ def apply_caqe(
         [N, D] L2-normalized context-expanded embeddings.
     """
     n = embeddings.shape[0]
-    if n <= 1 or alpha >= 1.0:
+    if k <= 0 or n <= 1 or alpha >= 1.0:
         return embeddings
 
     # Effective k: can't have more neighbors than n-1

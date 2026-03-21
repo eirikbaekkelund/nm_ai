@@ -252,7 +252,7 @@ def match_to_refs(embeddings, ref_embs, ref_ids):
 def apply_caqe(embeddings, boxes_xyxy, k=CAQE_K, alpha=CAQE_ALPHA):
     """Context-Aware Query Expansion — inline for sandbox (no extra imports)."""
     n = embeddings.shape[0]
-    if n <= 1 or alpha >= 1.0:
+    if k <= 0 or n <= 1 or alpha >= 1.0:
         return embeddings
     eff_k = min(k, n - 1)
     centroids = torch.stack([
