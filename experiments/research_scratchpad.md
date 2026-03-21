@@ -15,29 +15,74 @@
 
 ---
 
-## 1. Failure Diagnosis (TODO — run on RunPod)
+## 1. Failure Diagnosis — COMPLETE (phase6_augmented)
 
-### Run command
-```bash
-cd ~/nm_ai && git pull
-python -m vision_task.diagnose \
-    --classifier_weights experiments/phase5b_unfreeze4/best.pt \
-    --output_dir experiments/diagnostics
-```
+### Detection Results (conf=0.25, IoU=0.5)
 
-### What we need to learn
+| Metric | Value |
+|--------|-------|
+| TP | 3,049 |
+| FP | 501 |
+| FN | 187 |
+| **Recall** | **0.9422** |
+| Precision | 0.8589 |
 
-**Detection:**
-- [ ] Which size bucket has worst recall? (tiny/small/medium/large)
-- [ ] Which specific images have the most missed detections?
-- [ ] Are FPs clustered in certain image regions (e.g., shelf edges, price tags)?
-- [ ] How many FNs are at the image boundary vs center?
+**By size bucket (corrected):**
 
-**Classification:**
-- [ ] What's the accuracy on matched (IoU>0.5) detections?
-- [ ] Which category pairs are most confused?
-- [ ] What's the cosine similarity distribution for correct vs incorrect?
-- [ ] Are errors correlated with box size? (small crops → worse classification)
+| Bucket | Total | TP | FN | Recall |
+|--------|-------|----|----|--------|
+| tiny (<32px) | 2 | 1 | 1 | 0.500 |
+| small (32-64px) | 154 | 124 | 30 | **0.805** |
+| medium (64-128px) | 932 | 868 | 64 | 0.931 |
+| large (>128px) | 2,148 | 2,056 | 92 | 0.957 |
+
+**Key finding:** Small objects have 15% worse recall than large objects (80.5% vs 95.7%).
+
+**FP analysis:** All 100 top FPs have score >0.79 — these are likely real products not in GT annotations (unannotated products, price tags detected as products). Not a model problem.
+
+**Worst images by FN:** img_00304.jpg (22 FN/140 GT), img_00251.jpg (17 FN/88 GT)
+
+**Largest missed detections:** Some LARGE objects missed (area 160K-262K px) — likely partially occluded or at image edge.
+
+### Classification Results (on 3,049 matched detections)
+
+| Metric | Value |
+|--------|-------|
+| **Accuracy** | **2,713/3,049 = 0.8898** |
+| On HAS-REF categories | 2,713/2,896 = **0.9368** |
+| Cosine sim (correct) | mean=0.646, std=0.147 |
+| Cosine sim (incorrect) | mean=0.336, std=0.183 |
+
+**Error budget (336 total errors):**
+
+| Error Source | Count | % of Errors | Fix |
+|--------------|-------|-------------|-----|
+| No reference images (16 cats) | 153 | 46% | Can't fix — ceiling = 95.0% |
+| Coffee brand confusion (Evergood/Ali/Friele) | 102 | 30% | Need text/OCR or better aug |
+| Other classification errors | 81 | 24% | CAQE, k-NN, TTA |
+
+**Categories with 0% accuracy (>=2 samples): 19 total**
+- 14/19 have **NO reference images** — impossible to classify
+- 5/19 have refs but are confused with same-brand variants
+
+**Top confusion pairs (same-brand, nearly identical packaging):**
+- ALI ORIGINAL filtermalt ↔ kokmalt (21x)
+- EVERGOOD CLASSIC kokmalt ↔ filtermalt (20x)
+- EVERGOOD DARK ROAST filtermalt ↔ pressmalt (12x)
+- These products differ ONLY in small text on otherwise identical packaging
+
+**Impact simulation:**
+- Fix coffee brands → accuracy 0.889 → **0.923**
+- Fix no-ref ceiling → **0.937** (on matchable categories only)
+- Fix both → **0.972**
+
+### Key Insights
+
+1. **Classification is the bottleneck**, not detection. Detection recall is 94.2% already.
+2. **46% of classification errors are UNSOLVABLE** — no reference images for 16 categories
+3. **30% of errors are same-brand confusions** — products with identical packaging except text
+4. **Cosine similarity separates well** — correct mean=0.646, incorrect mean=0.336. The 21% of incorrect with sim>0.5 are same-brand confusions (high similarity, wrong variant)
+5. **Small object recall** is the main detection weakness (80.5% for 32-64px)
 - [ ] Categories with 0% accuracy — do they have reference images?
 - [ ] `unknown_product` (cat 355) — how many GT instances, how many predicted?
 
@@ -286,57 +331,65 @@ Source: [Springer](https://link.springer.com/article/10.1007/s00138-024-01549-9)
 
 ---
 
-## 5. Prioritized Action Plan
+## 5. Revised Action Plan (based on diagnostics)
 
-### Tier 1 — Highest Expected Impact (do first)
+> **The #1 insight: classification is the bottleneck.** Detection recall is 94.2%.
+> Classification accuracy is 88.9%, and 46% of errors are unsolvable (no ref images).
+> On matchable categories, accuracy is already 93.7%. The biggest solvable problem
+> is same-brand confusions (coffee variants) at 30% of errors.
 
-| # | Action | Type | Expected Gain | Effort |
-|---|--------|------|---------------|--------|
-| 1 | **Run diagnostics** | Analysis | Identifies where to focus | 10 min RunPod |
-| 2 | **Run ablation sweep** | Analysis | Best inference config | 5 min RunPod |
-| 3 | **CAQE spatial context** | Inference trick | +1-3% cls accuracy | 2 hours coding |
-| 4 | **SKU-110K pretrain** | Detection | +2-5% det mAP | Need disk space |
-| 5 | **Confidence threshold sweep** | Tuning | +1-2% combined | From ablation |
+### Tier 1 — Highest Impact, Lowest Effort
 
-### Tier 2 — Medium Impact
+| # | Action | Affects | Expected Gain | Effort |
+|---|--------|---------|---------------|--------|
+| 1 | **Run ablation sweep** | Combined | Find best inference config | 5 min RunPod |
+| 2 | **CAQE spatial context** | Classification | +1-3% on "other" errors | 2h coding |
+| 3 | **Lower det_conf** (0.10-0.15) | Detection | Recall 0.94→0.96+ | Ablation |
+| 4 | **unknown_product fallback** | Classification | Reduce noise from 16 no-ref cats | Threshold tuning |
 
-| # | Action | Type | Expected Gain | Effort |
-|---|--------|------|---------------|--------|
-| 6 | **DETR ensemble + WBF** | Detection | +1-3% det mAP | Day of training |
-| 7 | **Multi-scale WBF** | Detection | +1-2% det mAP | In ablation |
-| 8 | **k-NN k=3-5** | Classification | +0.5-1% cls | In ablation |
-| 9 | **Query TTA** | Classification | +0.5-1% cls | In ablation |
+### Tier 2 — Solid Impact, Moderate Effort
 
-### Tier 3 — Lower Impact / Higher Effort
+| # | Action | Affects | Expected Gain | Effort |
+|---|--------|---------|---------------|--------|
+| 5 | **Copy-paste aug** (coffee variants) | Classification | Fix 30% of errors (102 samples) | Already running |
+| 6 | **SKU-110K pretrain** | Detection (small objs) | Small recall 0.805→0.90+ | Needs disk |
+| 7 | **Multi-scale WBF** | Detection | +1-2% small obj recall | In ablation |
+| 8 | **k-NN k=3-5** | Classification | Reduce edge-case errors | In ablation |
 
-| # | Action | Type | Expected Gain | Effort |
-|---|--------|------|---------------|--------|
-| 10 | **Copy-paste aug for rare classes** | Training | +1-2% cls on tail | Already running |
-| 11 | **AdaCos loss** | Training | Unknown | Half day |
-| 12 | **ViT-L upgrade** | Training | +2-5% cls | Blocked by 420 MB |
-| 13 | **NMS IoU tuning** | Tuning | +0.5% det | In ablation |
+### Tier 3 — Speculative / Higher Effort
 
-### Tier BLOCKED
+| # | Action | Affects | Expected Gain | Effort |
+|---|--------|---------|---------------|--------|
+| 9 | **DETR ensemble + WBF** | Detection | +1-3% det mAP | Day of training |
+| 10 | **Query TTA** | Classification | +0.5-1% cls | In ablation |
+| 11 | **AdaCos loss** | Classification | Unknown | Retrain needed |
+
+### BLOCKED
 
 | # | Action | Blocker |
 |---|--------|---------|
 | D2 | SKU-110K pretrain | 13.6 GB download, RunPod 20 GB overlay |
 | ViT-L | Weight size | 420 MB submission limit |
 
+### NOT WORTH PURSUING
+
+- **OCR/multimodal** — too complex for 30% classification weight
+- **ViT-L** — blocked by 420 MB limit
+- **NMS IoU tuning** — detection is already at 94.2% recall
+
 ---
 
 ## 6. Experiment Log
 
-> Record results here as experiments complete.
+### Diagnostics — COMPLETE (2026-03-21)
+
+**Detection:** Recall=0.9422, Precision=0.8589. Small objects (32-64px) have 80.5% recall vs 95.7% for large. 501 FPs are high-confidence (>0.79) — likely unannotated products, not model errors.
+
+**Classification:** Accuracy=88.9% overall, 93.7% on matchable categories. Error breakdown: 46% no-ref (unsolvable), 30% coffee brand confusion, 24% other. Coffee brands (Evergood, Ali, Friele) account for 102/336 errors — products with identical packaging except text.
 
 ### Ablation Sweep (pending)
 ```
 TODO: paste results table here after running on RunPod
-```
-
-### Diagnostics (pending)
-```
-TODO: paste key findings here
 ```
 
 ### Copy-Paste Augmentation (in progress)

@@ -342,14 +342,7 @@ def main():
                 "size_bucket": bucket,
             })
 
-        for name, _, _ in SIZE_BUCKETS:
-            for gi in range(len(gt_anns)):
-                bucket = size_bucket(gt_areas[gi])
-                if bucket == name:
-                    size_stats[name]["total"] += 1
-                    if gi not in set(g for _, g, _ in matches) and gi not in unmatched_gts:
-                        pass  # Already counted
-        # Simpler: count total per bucket
+        # Count total GT and TP per size bucket
         for gi in range(len(gt_anns)):
             bucket = size_bucket(gt_areas[gi])
             size_stats[bucket]["total"] += 1
