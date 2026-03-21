@@ -89,7 +89,7 @@ def load_classifier(weights_path, device):
         state_dict = ckpt
     model = GroceryEmbedder(weights_path=None, freeze_backbone=True)
     model.load_state_dict(state_dict)
-    model = model.to(device).eval()
+    model = model.to(device).half().eval()
     return model
 
 
@@ -153,7 +153,7 @@ def embed_crops(crop_tensors, model, device, batch_size=128):
     all_embs = []
     n = crop_tensors.shape[0]
     for i in range(0, n, batch_size):
-        batch = crop_tensors[i : i + batch_size].to(device)
+        batch = crop_tensors[i : i + batch_size].to(device, dtype=torch.float16)
         embs = model(batch)
         embs = F.normalize(embs.float(), dim=1)
         all_embs.append(embs)
@@ -236,6 +236,7 @@ def main():
             conf=args.detect_conf,
             imgsz=DETECTOR_IMGSZ,
             device=device,
+            half=True,
             verbose=False,
         )
         dt_det = time.time() - t_det
