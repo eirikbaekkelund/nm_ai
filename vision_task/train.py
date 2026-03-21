@@ -66,11 +66,15 @@ def parse_args():
     parser.add_argument("--num_workers", type=int, default=None, help="Auto-detected from OS/cores if not set")
     parser.add_argument("--weights_path", type=str, default="models/dinov2_vitb14.pth")
     parser.add_argument(
-        "--resume", type=str, default=None,
+        "--resume",
+        type=str,
+        default=None,
         help="Resume from checkpoint (loads model + ArcFace weights, fresh optimizer)",
     )
     parser.add_argument(
-        "--unfreeze_blocks", type=int, default=0,
+        "--unfreeze_blocks",
+        type=int,
+        default=0,
         help="Number of backbone blocks to unfreeze (0=frozen/Phase4, 2=Phase5a, 4=Phase5b)",
     )
     args = parser.parse_args()
@@ -109,7 +113,11 @@ def main():
         logger.info("Device: %s", device)
     logger.info(
         "Config: batch_size=%d, num_workers=%d, lr=%.1e, backbone_lr=%.1e, unfreeze_blocks=%d",
-        args.batch_size, args.num_workers, args.lr, args.backbone_lr, args.unfreeze_blocks,
+        args.batch_size,
+        args.num_workers,
+        args.lr,
+        args.backbone_lr,
+        args.unfreeze_blocks,
     )
 
     # --- Model ---
@@ -157,8 +165,10 @@ def main():
         param_groups.append({"params": backbone_params, "lr": args.backbone_lr})
         logger.info(
             "Optimizer: head lr=%.1e (%d params), backbone lr=%.1e (%d params)",
-            args.lr, sum(p.numel() for p in loss_fn.parameters()),
-            args.backbone_lr, sum(p.numel() for p in backbone_params),
+            args.lr,
+            sum(p.numel() for p in loss_fn.parameters()),
+            args.backbone_lr,
+            sum(p.numel() for p in backbone_params),
         )
     else:
         logger.info("Optimizer: head lr=%.1e (backbone frozen)", args.lr)
@@ -255,16 +265,23 @@ def main():
         lr_now = scheduler.get_last_lr()[0]
         logger.info(
             "Epoch %d/%d — loss: %.4f, lr: %.2e, time: %.1fs",
-            epoch + 1, args.epochs, avg_loss, lr_now, elapsed,
+            epoch + 1,
+            args.epochs,
+            avg_loss,
+            lr_now,
+            elapsed,
         )
         metrics_fh.write(
-            json.dumps({
-                "event": "epoch",
-                "epoch": epoch + 1,
-                "train_loss": round(avg_loss, 4),
-                "lr": lr_now,
-                "time_s": round(elapsed, 1),
-            }) + "\n"
+            json.dumps(
+                {
+                    "event": "epoch",
+                    "epoch": epoch + 1,
+                    "train_loss": round(avg_loss, 4),
+                    "lr": lr_now,
+                    "time_s": round(elapsed, 1),
+                }
+            )
+            + "\n"
         )
         metrics_fh.flush()
 
@@ -275,16 +292,22 @@ def main():
             w_top5 = metrics.get("w_acc_top5", 0)
             logger.info(
                 "  Val: R@1=%.4f R@5=%.4f | W_acc@1=%.4f W_acc@5=%.4f (n_val=%d, n_ref=%d)",
-                metrics["recall@1"], metrics["recall@5"],
-                w_top1, w_top5,
-                metrics["n_val"], metrics["n_ref_categories"],
+                metrics["recall@1"],
+                metrics["recall@5"],
+                w_top1,
+                w_top5,
+                metrics["n_val"],
+                metrics["n_ref_categories"],
             )
             metrics_fh.write(
-                json.dumps({
-                    "event": "val",
-                    "epoch": epoch + 1,
-                    **{k: round(v, 4) if isinstance(v, float) else v for k, v in metrics.items()},
-                }) + "\n"
+                json.dumps(
+                    {
+                        "event": "val",
+                        "epoch": epoch + 1,
+                        **{k: round(v, 4) if isinstance(v, float) else v for k, v in metrics.items()},
+                    }
+                )
+                + "\n"
             )
             metrics_fh.flush()
 
@@ -316,7 +339,9 @@ def main():
                 torch.save(checkpoint, best_path)
                 logger.info(
                     "  Saved best: R@1=%.4f W_acc@1=%.4f -> %s",
-                    metrics["recall@1"], w_top1, best_path,
+                    metrics["recall@1"],
+                    w_top1,
+                    best_path,
                 )
 
     # Save final checkpoint
@@ -331,12 +356,15 @@ def main():
     torch.save(final_checkpoint, save_dir / "final.pt")
     logger.info("Training complete. Best R@1: %.4f, Best W_acc@1: %.4f", best_recall1, best_w_acc)
     metrics_fh.write(
-        json.dumps({
-            "event": "done",
-            "best_recall1": round(best_recall1, 4),
-            "best_w_acc1": round(best_w_acc, 4),
-            "final_train_loss": round(avg_loss, 4),
-        }) + "\n"
+        json.dumps(
+            {
+                "event": "done",
+                "best_recall1": round(best_recall1, 4),
+                "best_w_acc1": round(best_w_acc, 4),
+                "final_train_loss": round(avg_loss, 4),
+            }
+        )
+        + "\n"
     )
     metrics_fh.close()
 

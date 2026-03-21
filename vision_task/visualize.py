@@ -99,18 +99,16 @@ def draw_predictions(image, preds, category_names, score_thresh=0.0):
 
 def main():
     parser = argparse.ArgumentParser(description="Visualize shelf predictions")
-    parser.add_argument("--predictions", type=str, required=True,
-                        help="Path to predictions JSON")
-    parser.add_argument("--image_dir", type=str, required=True,
-                        help="Directory with shelf images")
-    parser.add_argument("--annotations", type=str, default=str(ANNOTATIONS),
-                        help="COCO annotations JSON for category names")
-    parser.add_argument("--output_dir", type=str, default="experiments/visualizations",
-                        help="Output directory for annotated images")
-    parser.add_argument("--max_images", type=int, default=10,
-                        help="Max images to visualize (0 = all)")
-    parser.add_argument("--score_thresh", type=float, default=0.1,
-                        help="Min score to draw a prediction")
+    parser.add_argument("--predictions", type=str, required=True, help="Path to predictions JSON")
+    parser.add_argument("--image_dir", type=str, required=True, help="Directory with shelf images")
+    parser.add_argument(
+        "--annotations", type=str, default=str(ANNOTATIONS), help="COCO annotations JSON for category names"
+    )
+    parser.add_argument(
+        "--output_dir", type=str, default="experiments/visualizations", help="Output directory for annotated images"
+    )
+    parser.add_argument("--max_images", type=int, default=10, help="Max images to visualize (0 = all)")
+    parser.add_argument("--score_thresh", type=float, default=0.1, help="Min score to draw a prediction")
     args = parser.parse_args()
 
     # Load predictions

@@ -33,9 +33,7 @@ def resolve_yaml(yaml_path):
         cfg = yaml.safe_load(f)
     if "path" in cfg and not Path(cfg["path"]).is_absolute():
         cfg["path"] = str((yaml_path.parent / cfg["path"]).resolve())
-    tmp = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".yaml", delete=False, dir=str(EXPERIMENTS_DIR)
-    )
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, dir=str(EXPERIMENTS_DIR))
     yaml.dump(cfg, tmp)
     tmp.close()
     return tmp.name
@@ -43,18 +41,14 @@ def resolve_yaml(yaml_path):
 
 def parse_args():
     p = argparse.ArgumentParser(description="Train YOLO11x detector")
-    p.add_argument("--skip_sku110k", action="store_true",
-                    help="Skip SKU-110K pretraining, fine-tune from COCO weights")
+    p.add_argument("--skip_sku110k", action="store_true", help="Skip SKU-110K pretraining, fine-tune from COCO weights")
     p.add_argument("--sku110k_epochs", type=int, default=50)
     p.add_argument("--shelf_epochs", type=int, default=30)
-    p.add_argument("--batch_sku", type=int, default=16,
-                    help="Batch size for SKU-110K (H100: 16, L4: 4)")
-    p.add_argument("--batch_shelf", type=int, default=8,
-                    help="Batch size for shelf fine-tune")
+    p.add_argument("--batch_sku", type=int, default=16, help="Batch size for SKU-110K (H100: 16, L4: 4)")
+    p.add_argument("--batch_shelf", type=int, default=8, help="Batch size for shelf fine-tune")
     p.add_argument("--imgsz", type=int, default=DETECTOR_IMGSZ)
     p.add_argument("--device", default="0")
-    p.add_argument("--base_model", default="yolo11x.pt",
-                    help="Starting COCO-pretrained weights")
+    p.add_argument("--base_model", default="yolo11x.pt", help="Starting COCO-pretrained weights")
     return p.parse_args()
 
 
@@ -148,8 +142,7 @@ def print_results(stage_name, results):
     print(f"\n--- {stage_name} Results ---")
     if results and hasattr(results, "results_dict"):
         rd = results.results_dict
-        for key in ["metrics/mAP50(B)", "metrics/mAP50-95(B)",
-                     "metrics/recall(B)", "metrics/precision(B)"]:
+        for key in ["metrics/mAP50(B)", "metrics/mAP50-95(B)", "metrics/recall(B)", "metrics/precision(B)"]:
             if key in rd:
                 print(f"  {key}: {rd[key]:.4f}")
     else:

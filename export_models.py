@@ -14,7 +14,6 @@ Creates:
 """
 
 import torch
-import numpy as np
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent

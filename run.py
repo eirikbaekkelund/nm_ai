@@ -7,7 +7,7 @@ Imports: argparse, json, pathlib, numpy, PIL, torch, torchvision, onnxruntime.
 All sandbox-safe — no banned imports.
 
 Usage (sandbox):
-    python run.py --input_dir /path/to/test_images --output_file predictions.json
+    python run.py --input /data/images --output /output/predictions.json
 
 Output: COCO-format predictions JSON:
     [{"image_id": int, "category_id": int, "bbox": [x,y,w,h], "score": float}, ...]
@@ -51,14 +51,15 @@ _NORM_STD = None
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--input_dir", type=str, required=True)
-    p.add_argument("--output_file", type=str, default="predictions.json")
+    p.add_argument("--input", type=str, required=True, dest="input_dir")
+    p.add_argument("--output", type=str, default="predictions.json", dest="output_file")
     p.add_argument("--detect_conf", type=float, default=DETECT_CONF)
     p.add_argument("--device", type=str, default="cuda:0")
     return p.parse_args()
 
 
 # ── YOLO preprocessing ──────────────────────────────────────────────────────
+
 
 def letterbox(img_tensor, target_size=1280):
     """Letterbox [3, H, W] float32 tensor to [3, target_size, target_size].
@@ -71,8 +72,10 @@ def letterbox(img_tensor, target_size=1280):
     new_w = int(round(w * scale))
 
     resized = F.interpolate(
-        img_tensor.unsqueeze(0), size=(new_h, new_w),
-        mode="bilinear", align_corners=False,
+        img_tensor.unsqueeze(0),
+        size=(new_h, new_w),
+        mode="bilinear",
+        align_corners=False,
     ).squeeze(0)
 
     pad_y = (target_size - new_h) // 2
@@ -80,13 +83,12 @@ def letterbox(img_tensor, target_size=1280):
     pad_bottom = target_size - new_h - pad_y
     pad_right = target_size - new_w - pad_x
 
-    padded = F.pad(
-        resized, (pad_x, pad_right, pad_y, pad_bottom), value=114 / 255
-    )
+    padded = F.pad(resized, (pad_x, pad_right, pad_y, pad_bottom), value=114 / 255)
     return padded, scale, pad_x, pad_y
 
 
 # ── YOLO postprocessing ─────────────────────────────────────────────────────
+
 
 def yolo_postprocess(output, conf_thresh, scale, pad_x, pad_y, orig_h, orig_w):
     """Decode raw YOLO output to xyxy boxes in original image coords.
@@ -134,6 +136,7 @@ def yolo_postprocess(output, conf_thresh, scale, pad_x, pad_y, orig_h, orig_w):
 
 # ── Classifier pipeline ─────────────────────────────────────────────────────
 
+
 def extract_and_transform_crops(img_tensor, boxes):
     """Crop, resize, center-crop, normalize for classifier."""
     _, h, w = img_tensor.shape
@@ -149,8 +152,10 @@ def extract_and_transform_crops(img_tensor, boxes):
 
         crop = img_tensor[:, y1:y2, x1:x2]
         crop = resize(
-            crop, [CLASSIFIER_RESIZE],
-            interpolation=InterpolationMode.BICUBIC, antialias=True,
+            crop,
+            [CLASSIFIER_RESIZE],
+            interpolation=InterpolationMode.BICUBIC,
+            antialias=True,
         )
         crop = center_crop(crop, [CLASSIFIER_SIZE, CLASSIFIER_SIZE])
         crops.append(crop)
@@ -201,6 +206,7 @@ def image_id_from_filename(filename):
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
+
 def main():
     global _NORM_MEAN, _NORM_STD
     args = parse_args()
@@ -234,8 +240,7 @@ def main():
 
     input_dir = Path(args.input_dir)
     image_paths = sorted(
-        p for p in input_dir.iterdir()
-        if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".bmp", ".tiff")
+        p for p in input_dir.iterdir() if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".bmp", ".tiff")
     )
 
     predictions = []
@@ -246,12 +251,7 @@ def main():
         orig_h, orig_w = img_np.shape[:2]
 
         # Image to GPU tensor
-        img_tensor = (
-            torch.from_numpy(img_np)
-            .permute(2, 0, 1)
-            .to(device=device, dtype=torch.float32)
-            .div_(255.0)
-        )
+        img_tensor = torch.from_numpy(img_np).permute(2, 0, 1).to(device=device, dtype=torch.float32).div_(255.0)
 
         # YOLO: letterbox → numpy → ORT detect → torch postprocess
         lb_tensor, scale, pad_x, pad_y = letterbox(img_tensor, DETECTOR_IMGSZ)
@@ -261,7 +261,13 @@ def main():
         yolo_out = torch.from_numpy(yolo_out_np).to(device)
 
         boxes_xyxy, det_scores = yolo_postprocess(
-            yolo_out, args.detect_conf, scale, pad_x, pad_y, orig_h, orig_w,
+            yolo_out,
+            args.detect_conf,
+            scale,
+            pad_x,
+            pad_y,
+            orig_h,
+            orig_w,
         )
         del lb_tensor, lb_np, yolo_out_np, yolo_out
 
@@ -271,7 +277,8 @@ def main():
 
         # Classify crops
         crop_tensors, valid_indices = extract_and_transform_crops(
-            img_tensor, boxes_xyxy,
+            img_tensor,
+            boxes_xyxy,
         )
         del img_tensor
 
@@ -279,23 +286,30 @@ def main():
             continue
 
         cat_ids, cos_scores = classify_crops(
-            crop_tensors, cls_sess, cls_input_name, ref_embs, ref_ids, device,
+            crop_tensors,
+            cls_sess,
+            cls_input_name,
+            ref_embs,
+            ref_ids,
+            device,
         )
         del crop_tensors
 
         for j, vi in enumerate(valid_indices):
             x1, y1, x2, y2 = boxes_xyxy[vi].tolist()
-            predictions.append({
-                "image_id": image_id,
-                "category_id": cat_ids[j],
-                "bbox": [
-                    round(x1, 2),
-                    round(y1, 2),
-                    round(x2 - x1, 2),
-                    round(y2 - y1, 2),
-                ],
-                "score": round(float(det_scores[vi]) * cos_scores[j], 4),
-            })
+            predictions.append(
+                {
+                    "image_id": image_id,
+                    "category_id": cat_ids[j],
+                    "bbox": [
+                        round(x1, 2),
+                        round(y1, 2),
+                        round(x2 - x1, 2),
+                        round(y2 - y1, 2),
+                    ],
+                    "score": round(float(det_scores[vi]) * cos_scores[j], 4),
+                }
+            )
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
