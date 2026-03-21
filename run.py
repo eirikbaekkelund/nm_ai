@@ -322,10 +322,7 @@ def main():
 
         # Single-pass detection at 1280
         lb_tensor, scale, pad_x, pad_y = letterbox(img_tensor, DETECTOR_IMGSZ)
-        if yolo_input_dtype == np.float16:
-            lb_np = lb_tensor.unsqueeze(0).half().cpu().numpy()
-        else:
-            lb_np = lb_tensor.unsqueeze(0).cpu().numpy()
+        lb_np = lb_tensor.unsqueeze(0).cpu().numpy().astype(yolo_input_dtype)
         yolo_out_np = yolo_sess.run(None, {yolo_input_name: lb_np})[0]
         yolo_out = torch.from_numpy(yolo_out_np).to(device)
         boxes_xyxy, det_scores = yolo_postprocess(
