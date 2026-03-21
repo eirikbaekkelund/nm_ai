@@ -26,13 +26,22 @@ import logging
 import sys
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
+from torchvision.transforms import InterpolationMode
+from torchvision.transforms.functional import center_crop, resize
 
 from vision_task.caqe import apply_caqe
-from vision_task.config import CROP_BUFFER, DETECTOR_IMGSZ
-from vision_task.data.transforms import get_eval_transform
+from vision_task.config import (
+    CLASSIFIER_RESIZE,
+    CLASSIFIER_SIZE,
+    CROP_BUFFER,
+    DETECTOR_IMGSZ,
+    IMAGENET_MEAN,
+    IMAGENET_STD,
+)
 from vision_task.embedder import GroceryEmbedder
 
 logger = logging.getLogger(__name__)
@@ -90,14 +99,61 @@ def image_id_from_filename(filename):
     return int(digits) if digits else hash(stem) % 100000
 
 
+def extract_and_transform_crops(img_tensor, boxes, device):
+    """Crop from GPU tensor, resize, center-crop, normalize — all on GPU.
+
+    Args:
+        img_tensor: [3, H, W] float32 tensor (0-1 range) on device
+        boxes: [N, 4] x1,y1,x2,y2 detection boxes
+        device: torch device
+
+    Returns:
+        (batch_tensor [M, 3, 518, 518] normalized, valid_indices list)
+    """
+    _, h, w = img_tensor.shape
+    norm_mean = torch.tensor(IMAGENET_MEAN, device=device).view(1, 3, 1, 1)
+    norm_std = torch.tensor(IMAGENET_STD, device=device).view(1, 3, 1, 1)
+
+    crops = []
+    valid_indices = []
+    for i in range(boxes.shape[0]):
+        x1, y1, x2, y2 = boxes[i].tolist()
+        bw, bh = x2 - x1, y2 - y1
+        pad_x = bw * CROP_BUFFER
+        pad_y = bh * CROP_BUFFER
+        cx1 = max(0, int(x1 - pad_x))
+        cy1 = max(0, int(y1 - pad_y))
+        cx2 = min(w, int(x2 + pad_x))
+        cy2 = min(h, int(y2 + pad_y))
+        if cx2 <= cx1 or cy2 <= cy1:
+            continue
+
+        crop = img_tensor[:, cy1:cy2, cx1:cx2]
+        crop = resize(
+            crop,
+            [CLASSIFIER_RESIZE],
+            interpolation=InterpolationMode.BICUBIC,
+            antialias=True,
+        )
+        crop = center_crop(crop, [CLASSIFIER_SIZE, CLASSIFIER_SIZE])
+        crops.append(crop)
+        valid_indices.append(i)
+
+    if not crops:
+        return None, []
+
+    batch = torch.stack(crops)
+    batch = (batch - norm_mean) / norm_std
+    return batch, valid_indices
+
+
 @torch.no_grad()
-def embed_crop_images(crop_images, model, device, batch_size=128):
-    """Embed PIL crop images → [N, D] L2-normalized embeddings."""
-    transform = get_eval_transform()
+def embed_crops(crop_tensors, model, device, batch_size=128):
+    """Embed pre-transformed crop tensors → [N, D] L2-normalized embeddings."""
     all_embs = []
-    for i in range(0, len(crop_images), batch_size):
-        batch_pil = crop_images[i : i + batch_size]
-        batch = torch.stack([transform(img) for img in batch_pil]).to(device)
+    n = crop_tensors.shape[0]
+    for i in range(0, n, batch_size):
+        batch = crop_tensors[i : i + batch_size].to(device)
         embs = model(batch)
         embs = F.normalize(embs.float(), dim=1)
         all_embs.append(embs)
@@ -197,34 +253,26 @@ def main():
         det_scores = boxes.conf.cpu()  # [N]
         total_detections += det_boxes.shape[0]
 
-        # Crop detections with 5% padding (matches training crops)
+        # GPU-side crop + transform (same approach as run.py)
         t_crop = time.time()
-        crop_images = []
-        valid_indices = []
-        for i in range(det_boxes.shape[0]):
-            x1, y1, x2, y2 = det_boxes[i].tolist()
-            bw, bh = x2 - x1, y2 - y1
-            pad_x = bw * CROP_BUFFER
-            pad_y = bh * CROP_BUFFER
-            x1 = max(0, int(x1 - pad_x))
-            y1 = max(0, int(y1 - pad_y))
-            x2 = min(orig_w, int(x2 + pad_x))
-            y2 = min(orig_h, int(y2 + pad_y))
-            if x2 <= x1 or y2 <= y1:
-                continue
-            crop = img.crop((x1, y1, x2, y2))
-            crop_images.append(crop)
-            valid_indices.append(i)
+        img_tensor = torch.from_numpy(np.array(img)).permute(2, 0, 1).to(
+            device=device, dtype=torch.float32
+        ).div_(255.0)
+        crop_tensors, valid_indices = extract_and_transform_crops(
+            img_tensor, det_boxes, device
+        )
+        del img_tensor
         dt_crop = time.time() - t_crop
 
-        if not crop_images:
+        if crop_tensors is None:
             continue
 
-        total_crops += len(crop_images)
+        total_crops += crop_tensors.shape[0]
 
         # Embed → CAQE → Match
         t_cls = time.time()
-        embeddings = embed_crop_images(crop_images, cls_model, device, args.classify_batch)
+        embeddings = embed_crops(crop_tensors, cls_model, device, args.classify_batch)
+        del crop_tensors
 
         if args.caqe and len(valid_indices) > 1:
             valid_boxes = det_boxes[valid_indices]  # [M, 4] xyxy
