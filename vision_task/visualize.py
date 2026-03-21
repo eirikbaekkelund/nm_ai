@@ -99,8 +99,8 @@ def draw_predictions(image, preds, category_names, score_thresh=0.0):
 
 def main():
     parser = argparse.ArgumentParser(description="Visualize shelf predictions")
-    parser.add_argument("--predictions", type=str, required=True, help="Path to predictions JSON")
-    parser.add_argument("--image_dir", type=str, required=True, help="Directory with shelf images")
+    parser.add_argument("--predictions", type=str, default="predictions.json", help="Path to predictions JSON")
+    parser.add_argument("--image_dir", type=str, default="data/coco/train/images", help="Directory with shelf images")
     parser.add_argument(
         "--annotations", type=str, default=str(ANNOTATIONS), help="COCO annotations JSON for category names"
     )
