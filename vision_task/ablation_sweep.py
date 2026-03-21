@@ -395,8 +395,9 @@ def _run_coco_eval(predictions: list, coco_gt: COCO) -> float:
     coco_eval.evaluate()
     coco_eval.accumulate()
     coco_eval.summarize()
-    # stats[0] = AP @ IoU=0.5 (since we only have one threshold)
-    return float(coco_eval.stats[0])
+    # stats[0] uses hardcoded maxDets=100 (returns -1 since we use [1,10,300])
+    # stats[1] = AP @ IoU=0.50, area=all, maxDets=params.maxDets[2]=300
+    return float(coco_eval.stats[1])
 
 
 # ---------------------------------------------------------------------------
