@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import InterpolationMode
 import torchvision.transforms as T
@@ -30,7 +31,7 @@ from vision_task.config import CLASSIFIER_RESIZE, CLASSIFIER_SIZE, IMAGENET_MEAN
 from vision_task.data.reference_dataset import ProductReferenceDataset
 from vision_task.data.transforms import get_eval_transform
 from vision_task.embedder import GroceryEmbedder
-from vision_task.evaluate import aggregate_ref_embeddings, embed_dataset
+from vision_task.evaluate import embed_dataset
 
 
 logger = logging.getLogger(__name__)
@@ -133,6 +134,12 @@ def parse_args():
         action="store_true",
         help="Use TTA: embed each reference with 6 views (center, hflip, 4 corners), average per category",
     )
+    parser.add_argument(
+        "--angles",
+        type=str,
+        default="main,front",
+        help="Comma-separated reference image angles to use (e.g. 'main,front'). 'all' = use every angle.",
+    )
     return parser.parse_args()
 
 
@@ -169,10 +176,14 @@ def main():
     model.eval()
 
     # --- Load reference dataset ---
+    angles = None if args.angles == "all" else args.angles.split(",")
+    logger.info("Reference angles filter: %s", angles or "all")
+
     base_ref_ds = ProductReferenceDataset(
         product_images_dir=args.product_images_dir,
         mapping_path=args.mapping_path,
         transform=None if args.tta else get_eval_transform(),
+        angles=angles,
     )
 
     if args.tta:
@@ -194,12 +205,17 @@ def main():
     )
     logger.info("Reference images: %d across %d products", len(ref_ds), len(set(ref_ds.labels)))
 
-    # --- Embed and aggregate ---
+    # --- Embed ---
     ref_embs_raw, ref_labels_raw = embed_dataset(model, ref_loader, device)
+    ref_embs_raw = F.normalize(ref_embs_raw.float(), dim=1)
     logger.info("Raw reference embeddings: %s", ref_embs_raw.shape)
 
-    ref_embs, ref_labels = aggregate_ref_embeddings(ref_embs_raw, ref_labels_raw)
-    logger.info("Aggregated: %d categories, embedding shape %s", len(ref_labels), ref_embs.shape)
+    unique_cats = ref_labels_raw.unique()
+    logger.info(
+        "Keeping all %d individual embeddings across %d categories (max-sim matching)",
+        ref_embs_raw.shape[0],
+        len(unique_cats),
+    )
 
     # --- Save ---
     output_path = Path(args.output)
@@ -207,17 +223,17 @@ def main():
 
     torch.save(
         {
-            "embeddings": ref_embs,  # [C, 768] L2-normalized
-            "category_ids": ref_labels,  # [C] int64
+            "embeddings": ref_embs_raw,  # [N_ref, 768] L2-normalized, one per image
+            "category_ids": ref_labels_raw,  # [N_ref] int64
         },
         output_path,
     )
 
     logger.info("Saved reference embeddings to %s", output_path)
-    logger.info("Shape: %s, dtype: %s", ref_embs.shape, ref_embs.dtype)
+    logger.info("Shape: %s, dtype: %s", ref_embs_raw.shape, ref_embs_raw.dtype)
 
     # Verify normalization
-    norms = ref_embs.norm(dim=1)
+    norms = ref_embs_raw.norm(dim=1)
     logger.info("Norm range: [%.6f, %.6f] (should be ~1.0)", norms.min(), norms.max())
 
 

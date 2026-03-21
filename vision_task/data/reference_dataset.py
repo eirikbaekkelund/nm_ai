@@ -4,12 +4,18 @@ mapped to category_id via category_mapping.json.
 
 Usage:
     from vision_task.data.reference_dataset import ProductReferenceDataset
+
+    # All angles (default):
+    ds = ProductReferenceDataset(...)
+
+    # Only front-facing angles (recommended for embeddings):
+    ds = ProductReferenceDataset(..., angles=["main", "front"])
 """
 
 import json
 from pathlib import Path
 from PIL import Image
-from typing import List
+from typing import List, Optional
 from torch.utils.data import Dataset
 
 
@@ -19,11 +25,22 @@ class ProductReferenceDataset(Dataset):
     Uses category_mapping.json to bridge product_code → category_id.
     Each product may have multiple angle images (main, front, back, etc.).
     CUSTOM_xxx dirs are excluded (no category mapping).
+
+    Args:
+        angles: If provided, only load images whose stem matches one of these
+                names (e.g. ["main", "front"]). None = load all *.jpg.
     """
 
-    def __init__(self, product_images_dir: str, mapping_path: str, transform=None):
+    def __init__(
+        self,
+        product_images_dir: str,
+        mapping_path: str,
+        transform=None,
+        angles: Optional[List[str]] = None,
+    ):
         self.product_images_dir = Path(product_images_dir)
         self.transform = transform
+        self.angles = set(angles) if angles else None
 
         with open(mapping_path, encoding="utf-8") as f:
             mapping = json.load(f)
@@ -40,6 +57,8 @@ class ProductReferenceDataset(Dataset):
 
             cat_id = item["category_id"]
             for img_file in sorted(product_dir.glob("*.jpg")):
+                if self.angles and img_file.stem not in self.angles:
+                    continue
                 entries.append(
                     {
                         "path": img_file,
