@@ -11,6 +11,10 @@ Axes:
 
 Evaluation via pycocotools mAP against COCO ground truth (val split).
 
+Speed optimization: embeddings are pre-computed once per unique (scales, query_tta)
+combo at the lowest det_conf. Higher conf thresholds just filter pre-computed results.
+knn_k and unknown_threshold only change matching logic — no re-embedding needed.
+
 Usage:
     python -m vision_task.ablation_sweep
     python -m vision_task.ablation_sweep --mode combinatorial --axes det_conf,knn_k
@@ -230,8 +234,8 @@ def detect_multiscale_wbf(
 # ---------------------------------------------------------------------------
 
 
-def extract_crops(img: Image.Image, boxes_xyxy: np.ndarray) -> list:
-    """Crop PIL images with CROP_BUFFER padding. Returns list of PIL crops."""
+def extract_crops(img: Image.Image, boxes_xyxy: np.ndarray) -> tuple:
+    """Crop PIL images with CROP_BUFFER padding. Returns (crops, valid_indices)."""
     w, h = img.size
     crops = []
     valid = []
@@ -337,27 +341,6 @@ def classify_knn(
     return cat_ids, scores
 
 
-def classify_detections(
-    crops: list,
-    model,
-    ref_embs: torch.Tensor,
-    ref_ids: torch.Tensor,
-    device,
-    config: SweepConfig,
-    batch_size: int = 128,
-) -> tuple:
-    """Full classification pipeline. Returns (category_ids, cos_scores)."""
-    if not crops:
-        return [], []
-
-    if config.query_tta:
-        embs = embed_crops_with_tta(crops, model, device, batch_size)
-    else:
-        embs = embed_crops_standard(crops, model, device, batch_size)
-
-    return classify_knn(embs, ref_embs, ref_ids, config.knn_k, config.unknown_threshold)
-
-
 # ---------------------------------------------------------------------------
 # COCO evaluation
 # ---------------------------------------------------------------------------
@@ -401,52 +384,139 @@ def _run_coco_eval(predictions: list, coco_gt: COCO) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Single config runner
+# Pre-computed embedding store (main speed optimization)
 # ---------------------------------------------------------------------------
 
 
-def run_single_config(
-    config: SweepConfig,
-    image_paths: list,
-    det_cache: DetectionCache,
-    cls_model,
-    ref_embs: torch.Tensor,
-    ref_ids: torch.Tensor,
-    device,
-    det_gt: COCO,
-    cls_gt: COCO,
-    batch_size: int = 128,
-) -> dict:
-    """Run full pipeline for one config and return metrics."""
-    predictions = []
+class EmbeddingStore:
+    """Pre-compute and cache embeddings per unique (scales, query_tta) combo.
 
-    for img_path in image_paths:
-        image_id = image_id_from_filename(img_path.name)
-        img = Image.open(img_path).convert("RGB")
-        img_w, img_h = img.size
+    For each combo, detections are run at the minimum conf across all configs.
+    Embeddings are computed once. Higher conf thresholds filter the cached results.
 
-        # Detection
-        if len(config.scales) == 1:
-            boxes, det_scores = detect_single_scale(det_cache, img_path, config.scales[0], config.det_conf)
-        else:
-            boxes, det_scores = detect_multiscale_wbf(det_cache, img_path, config.scales, config.det_conf, img_w, img_h)
+    This reduces ~14 DINOv2 forward passes to just 2-3 (one per unique combo).
+    """
 
-        if len(boxes) == 0:
-            continue
+    def __init__(self, det_cache: DetectionCache, cls_model, ref_embs, ref_ids,
+                 device, image_paths: list, batch_size: int = 128):
+        self._det_cache = det_cache
+        self._cls_model = cls_model
+        self._ref_embs = ref_embs
+        self._ref_ids = ref_ids
+        self._device = device
+        self._image_paths = image_paths
+        self._batch_size = batch_size
+        # Cache: (scales_key, query_tta) -> list of per-image dicts
+        self._cache = {}
 
-        # Crop
-        crops, valid_indices = extract_crops(img, boxes)
-        if not crops:
-            continue
+    def _scales_key(self, scales: list) -> tuple:
+        return tuple(scales)
 
-        # Classify
-        cat_ids, cos_scores = classify_detections(crops, cls_model, ref_embs, ref_ids, device, config, batch_size)
+    def precompute(self, scales: list, query_tta: bool, min_conf: float):
+        """Pre-compute embeddings for all val images at min_conf."""
+        key = (self._scales_key(scales), query_tta)
+        if key in self._cache:
+            return
 
-        # Build predictions
-        for j, vi in enumerate(valid_indices):
-            x1, y1, x2, y2 = boxes[vi]
-            predictions.append(
-                {
+        logger.info("Pre-computing embeddings: scales=%s, tta=%s, min_conf=%.2f", scales, query_tta, min_conf)
+        t0 = time.time()
+
+        per_image_data = []
+        total_crops = 0
+
+        for img_path in self._image_paths:
+            img = Image.open(img_path).convert("RGB")
+            img_w, img_h = img.size
+            image_id = image_id_from_filename(img_path.name)
+
+            # Detect at min_conf (superset of all higher conf)
+            if len(scales) == 1:
+                boxes, det_scores = detect_single_scale(self._det_cache, img_path, scales[0], min_conf)
+            else:
+                boxes, det_scores = detect_multiscale_wbf(
+                    self._det_cache, img_path, scales, min_conf, img_w, img_h
+                )
+
+            if len(boxes) == 0:
+                per_image_data.append({
+                    "image_id": image_id,
+                    "boxes": np.empty((0, 4), dtype=np.float32),
+                    "det_scores": np.empty((0,), dtype=np.float32),
+                    "valid_indices": [],
+                    "embeddings": None,
+                })
+                continue
+
+            # Crop
+            crops, valid_indices = extract_crops(img, boxes)
+            if not crops:
+                per_image_data.append({
+                    "image_id": image_id,
+                    "boxes": boxes,
+                    "det_scores": det_scores,
+                    "valid_indices": [],
+                    "embeddings": None,
+                })
+                continue
+
+            # Embed
+            if query_tta:
+                embs = embed_crops_with_tta(crops, self._cls_model, self._device, self._batch_size)
+            else:
+                embs = embed_crops_standard(crops, self._cls_model, self._device, self._batch_size)
+
+            total_crops += len(crops)
+            per_image_data.append({
+                "image_id": image_id,
+                "boxes": boxes,
+                "det_scores": det_scores,
+                "valid_indices": valid_indices,
+                "embeddings": embs,
+            })
+
+        self._cache[key] = per_image_data
+        logger.info("  Embedded %d crops in %.1fs", total_crops, time.time() - t0)
+
+    def run_config(self, config: SweepConfig, det_gt: COCO, cls_gt: COCO) -> dict:
+        """Evaluate a config using pre-computed embeddings. Only re-does matching."""
+        key = (self._scales_key(config.scales), config.query_tta)
+        per_image_data = self._cache[key]
+
+        predictions = []
+
+        for data in per_image_data:
+            if data["embeddings"] is None:
+                continue
+
+            boxes = data["boxes"]
+            det_scores = data["det_scores"]
+            valid_indices = data["valid_indices"]
+            embs = data["embeddings"]
+            image_id = data["image_id"]
+
+            # Filter by det_conf (higher than what we pre-computed at)
+            # valid_indices maps embedding index → box index
+            keep_mask = []
+            for j, vi in enumerate(valid_indices):
+                keep_mask.append(det_scores[vi] >= config.det_conf)
+
+            if not any(keep_mask):
+                continue
+
+            # Filter embeddings and boxes
+            kept_embs = embs[torch.tensor(keep_mask, dtype=torch.bool)]
+            kept_vi = [vi for vi, keep in zip(valid_indices, keep_mask) if keep]
+
+            # Classify (just matching — no DINOv2 forward pass)
+            cat_ids, cos_scores = classify_knn(
+                kept_embs, self._ref_embs, self._ref_ids,
+                config.knn_k, config.unknown_threshold
+            )
+
+            # Build predictions
+            for j, vi in enumerate(kept_vi):
+                x1, y1, x2, y2 = boxes[vi]
+                predictions.append({
                     "image_id": image_id,
                     "category_id": cat_ids[j],
                     "bbox": [
@@ -456,10 +526,9 @@ def run_single_config(
                         round(float(y2 - y1), 2),
                     ],
                     "score": round(float(det_scores[vi]) * cos_scores[j], 4),
-                }
-            )
+                })
 
-    return evaluate_coco_map(predictions, det_gt, cls_gt)
+        return evaluate_coco_map(predictions, det_gt, cls_gt)
 
 
 # ---------------------------------------------------------------------------
@@ -640,13 +709,26 @@ def main():
     configs = generate_configs(args.mode, axes)
     logger.info("Sweep mode: %s, configs: %d", args.mode, len(configs))
 
-    # --- Run sweep ---
+    # --- Pre-compute embeddings for unique (scales, query_tta) combos ---
+    emb_store = EmbeddingStore(det_cache, cls_model, ref_embs, ref_ids, device, val_image_paths, args.batch_size)
+
+    # Find minimum det_conf per (scales, tta) combo across all configs
+    combo_min_conf = {}
+    for cfg in configs:
+        key = (tuple(cfg.scales), cfg.query_tta)
+        if key not in combo_min_conf or cfg.det_conf < combo_min_conf[key]:
+            combo_min_conf[key] = cfg.det_conf
+
+    t_embed = time.time()
+    for (scales_tuple, tta), min_conf in combo_min_conf.items():
+        emb_store.precompute(list(scales_tuple), tta, min_conf)
+    logger.info("All embeddings pre-computed in %.1fs", time.time() - t_embed)
+
+    # --- Run sweep (matching only — no DINOv2 forward passes) ---
     results = []
     for i, cfg in enumerate(configs):
         t1 = time.time()
-        metrics = run_single_config(
-            cfg, val_image_paths, det_cache, cls_model, ref_embs, ref_ids, device, det_gt, cls_gt, args.batch_size
-        )
+        metrics = emb_store.run_config(cfg, det_gt, cls_gt)
         elapsed = time.time() - t1
         result = {
             "config": asdict(cfg),
@@ -670,7 +752,7 @@ def main():
     save_results_json(results, Path(args.output))
 
     total_time = sum(r["elapsed_s"] for r in results)
-    logger.info("Total sweep time: %.1fs", total_time)
+    logger.info("Total sweep time: %.1fs (+ pre-compute)", total_time)
 
 
 if __name__ == "__main__":
