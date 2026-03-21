@@ -65,14 +65,24 @@ def load_confusion_pairs(diagnosis_path: str, min_count: int = 3) -> list:
     return pairs
 
 
-# Fallback: hardcoded top confusion pairs from typical coffee shelf data
+# Fallback: hardcoded top confusion pairs from diagnosis (2026-03-21)
 FALLBACK_CONFUSION_PAIRS = [
     # ALI variants
-    (6, 7, 21),    # ALI ORIGINAL filtermalt ↔ kokmalt
-    (5, 7, 10),    # ALI KAFFE filtermalt ↔ ALI ORIGINAL kokmalt
+    (160, 171, 21),  # ALI ORIGINAL KOKMALT ↔ FILTERMALT
+    (160, 198, 3),   # ALI ORIGINAL KOKMALT ↔ KAFFEPUTER
     # EVERGOOD variants
-    (89, 90, 20),  # EVERGOOD CLASSIC kokmalt ↔ filtermalt
-    (91, 92, 12),  # EVERGOOD DARK ROAST filtermalt ↔ pressmalt
+    (100, 304, 20),  # EVERGOOD CLASSIC FILTERMALT ↔ KOKMALT
+    (49, 347, 12),   # EVERGOOD DARK ROAST FILTERMALT ↔ PRESSMALT
+    (100, 141, 3),   # EVERGOOD CLASSIC FILTERMALT ↔ PRESSMALT
+    # Other high-count pairs
+    (30, 308, 10),   # SJOKORINGER ↔ HAVREGRANOLA
+    (253, 224, 5),   # SOFT FLORA LETT 235G ↔ 540G
+    (21, 39, 4),     # KNEKKEBRØD SESAM ↔ KANEL
+    (261, 260, 3),   # MÜSLI HASSELNØTT ↔ ENERGI
+    (155, 295, 3),   # MELANGE M/SMØR ↔ MELANGE FLYTENDE
+    (325, 178, 2),   # NESCAFE GULL ↔ GOLD ORGANIC
+    (27, 189, 2),    # YELLOW LABEL 50POS ↔ 25POS
+    (100, 40, 2),    # EVERGOOD CLASSIC ↔ FRIELE FROKOST
 ]
 
 

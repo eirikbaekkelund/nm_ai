@@ -49,7 +49,9 @@ UNKNOWN_CATEGORY_ID = 355
 UNKNOWN_THRESHOLD = 0.0
 
 # CAQE — Context-Aware Query Expansion
-CAQE_K = 3
+# Ablation showed CAQE hurts classification (neighbor averaging dilutes features).
+# Set k=0 to disable. Keep code path for future experiments.
+CAQE_K = 0
 CAQE_ALPHA = 0.5
 
 _NORM_MEAN = None
