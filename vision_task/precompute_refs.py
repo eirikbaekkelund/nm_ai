@@ -8,9 +8,12 @@ Accepts both formats:
   - Training checkpoint: dict with "model_state_dict" key
   - Stripped state_dict: raw {layer_name: tensor} (e.g. models/classifier.pt)
 
+TTA mode (--tta): embeds each reference image with multiple augmented views
+(original, horizontal flip, 4-corner crops), averages all views per category.
+
 Usage:
     python -m vision_task.precompute_refs --checkpoint models/classifier.pt
-    python -m vision_task.precompute_refs --checkpoint experiments/phase5_finetune/best.pt
+    python -m vision_task.precompute_refs --checkpoint models/classifier.pt --tta
 """
 
 import argparse
@@ -19,8 +22,11 @@ import sys
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
+from torchvision.transforms import InterpolationMode
+import torchvision.transforms as T
 
+from vision_task.config import CLASSIFIER_RESIZE, CLASSIFIER_SIZE, IMAGENET_MEAN, IMAGENET_STD
 from vision_task.data.reference_dataset import ProductReferenceDataset
 from vision_task.data.transforms import get_eval_transform
 from vision_task.embedder import GroceryEmbedder
@@ -28,6 +34,72 @@ from vision_task.evaluate import aggregate_ref_embeddings, embed_dataset
 
 
 logger = logging.getLogger(__name__)
+
+
+class TTAReferenceDataset(Dataset):
+    """Wraps a ProductReferenceDataset with multiple augmented views per image.
+
+    For each image, produces N views:
+      0: center crop (standard eval)
+      1: horizontal flip + center crop
+      2-5: four corner crops (TL, TR, BL, BR)
+
+    Each view gets its own entry; labels are duplicated accordingly.
+    """
+
+    def __init__(self, base_dataset: ProductReferenceDataset):
+        self._base = base_dataset
+        self._n_views = 6  # center, hflip, TL, TR, BL, BR
+
+        # Shared resize + normalize
+        self._resize = T.Resize(CLASSIFIER_RESIZE, interpolation=InterpolationMode.BICUBIC)
+        self._normalize = T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
+        self._to_tensor = T.ToTensor()
+
+    def __len__(self):
+        return len(self._base) * self._n_views
+
+    def __getitem__(self, idx):
+        base_idx = idx // self._n_views
+        view_idx = idx % self._n_views
+
+        entry = self._base._entries[base_idx]
+        from PIL import Image
+
+        img = Image.open(entry["path"]).convert("RGB")
+
+        # Resize to CLASSIFIER_RESIZE on short edge
+        img = self._resize(img)
+        w, h = img.size
+        cs = CLASSIFIER_SIZE
+
+        if view_idx == 0:
+            # Center crop (standard eval)
+            img = T.functional.center_crop(img, [cs, cs])
+        elif view_idx == 1:
+            # Horizontal flip + center crop
+            img = T.functional.hflip(img)
+            img = T.functional.center_crop(img, [cs, cs])
+        elif view_idx == 2:
+            # Top-left
+            img = T.functional.crop(img, 0, 0, cs, cs)
+        elif view_idx == 3:
+            # Top-right
+            img = T.functional.crop(img, 0, max(0, w - cs), cs, cs)
+        elif view_idx == 4:
+            # Bottom-left
+            img = T.functional.crop(img, max(0, h - cs), 0, cs, cs)
+        elif view_idx == 5:
+            # Bottom-right
+            img = T.functional.crop(img, max(0, h - cs), max(0, w - cs), cs, cs)
+
+        tensor = self._to_tensor(img)
+        tensor = self._normalize(tensor)
+        return tensor, entry["category_id"]
+
+    @property
+    def labels(self):
+        return [lbl for lbl in self._base._labels for _ in range(self._n_views)]
 
 
 def parse_args():
@@ -55,6 +127,11 @@ def parse_args():
         "--mapping_path",
         type=str,
         default="data/category_mapping.json",
+    )
+    parser.add_argument(
+        "--tta",
+        action="store_true",
+        help="Use TTA: embed each reference with 6 views (center, hflip, 4 corners), average per category",
     )
     return parser.parse_args()
 
@@ -92,11 +169,22 @@ def main():
     model.eval()
 
     # --- Load reference dataset ---
-    ref_ds = ProductReferenceDataset(
+    base_ref_ds = ProductReferenceDataset(
         product_images_dir=args.product_images_dir,
         mapping_path=args.mapping_path,
-        transform=get_eval_transform(),
+        transform=None if args.tta else get_eval_transform(),
     )
+
+    if args.tta:
+        ref_ds = TTAReferenceDataset(base_ref_ds)
+        logger.info(
+            "TTA mode: %d base images x 6 views = %d embeddings",
+            len(base_ref_ds),
+            len(ref_ds),
+        )
+    else:
+        ref_ds = base_ref_ds
+
     ref_loader = DataLoader(
         ref_ds,
         batch_size=args.batch_size,
