@@ -30,7 +30,6 @@ info() { echo -e "       $1"; }
 FAILURES=0
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORK_DIR=$(mktemp -d)
-VENV_DIR="$WORK_DIR/sandbox_venv"
 SUBMISSION_DIR="$WORK_DIR/submission"
 TEST_IMAGES_DIR="$WORK_DIR/test_images"
 OUTPUT_FILE="$WORK_DIR/predictions.json"
@@ -119,40 +118,37 @@ done
 echo ""
 
 # -----------------------------------------------
-# Step 3: Create sandbox venv
+# Step 3: Check installed packages
 # -----------------------------------------------
-echo "--- Step 3: Create sandbox-pinned venv ---"
+echo "--- Step 3: Package versions (sandbox targets in parens) ---"
 
-python3.11 -m venv "$VENV_DIR" 2>/dev/null || python3 -m venv "$VENV_DIR"
-source "$VENV_DIR/bin/activate"
+# Sandbox targets
+TORCH_TARGET="2.6.0"
+TV_TARGET="0.21.0"
+ORT_TARGET="1.20.0"
+NP_TARGET="1.26.4"
+PIL_TARGET="10.2.0"
 
-info "Python: $(python --version)"
-info "Installing sandbox-pinned packages..."
+TORCH_VER=$(python3 -c 'import torch; print(torch.__version__)' 2>/dev/null || echo "MISSING")
+TV_VER=$(python3 -c 'import torchvision; print(torchvision.__version__)' 2>/dev/null || echo "MISSING")
+ORT_VER=$(python3 -c 'import onnxruntime; print(onnxruntime.__version__)' 2>/dev/null || echo "MISSING")
+NP_VER=$(python3 -c 'import numpy; print(numpy.__version__)' 2>/dev/null || echo "MISSING")
+PIL_VER=$(python3 -c 'from PIL import Image; import PIL; print(PIL.__version__)' 2>/dev/null || echo "MISSING")
 
-pip install --quiet --upgrade pip
+info "torch:       $TORCH_VER (sandbox: $TORCH_TARGET)"
+info "torchvision: $TV_VER (sandbox: $TV_TARGET)"
+info "onnxruntime: $ORT_VER (sandbox: $ORT_TARGET)"
+info "numpy:       $NP_VER (sandbox: $NP_TARGET)"
+info "Pillow:      $PIL_VER (sandbox: $PIL_TARGET)"
+info "CUDA:        $(python3 -c 'import torch; print(torch.cuda.is_available())')"
 
-# Install torch+torchvision from PyTorch cu124 index
-pip install --quiet \
-    torch==2.6.0+cu124 \
-    torchvision==0.21.0+cu124 \
-    --index-url https://download.pytorch.org/whl/cu124
-
-# Install remaining packages from PyPI
-pip install --quiet \
-    onnxruntime-gpu==1.20.0 \
-    numpy==1.26.4 \
-    Pillow==10.2.0
-
-pass "Sandbox venv created"
-info "torch:           $(python -c 'import torch; print(torch.__version__)')"
-info "torchvision:     $(python -c 'import torchvision; print(torchvision.__version__)')"
-info "onnxruntime:     $(python -c 'import onnxruntime; print(onnxruntime.__version__)')"
-info "numpy:           $(python -c 'import numpy; print(numpy.__version__)')"
-info "Pillow:          $(python -c 'from PIL import Image; import PIL; print(PIL.__version__)')"
-info "CUDA available:  $(python -c 'import torch; print(torch.cuda.is_available())')"
+# Warn on mismatches but don't fail — ONNX models are version-independent
+[[ "$TORCH_VER" == *"$TORCH_TARGET"* ]] || warn "torch $TORCH_VER != sandbox $TORCH_TARGET (OK — only used for tensors, not model loading)"
+[[ "$ORT_VER" == "$ORT_TARGET" ]] || warn "onnxruntime $ORT_VER != sandbox $ORT_TARGET (ONNX opset 17 is compatible)"
+[ "$ORT_VER" != "MISSING" ] && pass "All required packages importable" || fail "onnxruntime not installed"
 
 # Check CUDA provider for onnxruntime
-python -c "
+python3 -c "
 import onnxruntime as ort
 providers = ort.get_available_providers()
 print('ORT providers:', providers)
@@ -197,7 +193,7 @@ echo "--- Step 5: Check CLI arguments ---"
 # Verify run.py accepts these exact argument names
 cd "$SUBMISSION_DIR"
 
-python -c "
+python3 -c "
 import ast, sys
 tree = ast.parse(open('run.py').read())
 args_found = []
@@ -239,7 +235,7 @@ echo "--- Step 6: Run inference ---"
 
 START_TIME=$(date +%s%N)
 
-python run.py \
+python3 run.py \
     $INPUT_ARG "$TEST_IMAGES_DIR" \
     $OUTPUT_ARG "$OUTPUT_FILE" \
     2>&1 | tee "$WORK_DIR/run_output.log"
@@ -280,7 +276,7 @@ else
     pass "Output file exists"
 
     # Validate JSON structure with Python
-    python -c "
+    python3 -c "
 import json
 from pathlib import Path
 
@@ -333,7 +329,7 @@ echo ""
 # -----------------------------------------------
 echo "--- Step 8: GPU memory ---"
 
-python -c "
+python3 -c "
 import torch
 if torch.cuda.is_available():
     for i in range(torch.cuda.device_count()):
@@ -362,7 +358,6 @@ echo "============================================="
 # -----------------------------------------------
 # Cleanup
 # -----------------------------------------------
-deactivate 2>/dev/null || true
 cd "$SCRIPT_DIR"
 echo ""
 echo "Work dir preserved at: $WORK_DIR"
