@@ -305,7 +305,7 @@ def main():
                 "  [%d/%d] %d dets, %d crops | det=%.2fs crop=%.2fs cls=%.2fs | "
                 "%.1f img/s, ETA %.0fs",
                 img_idx + 1, len(image_paths),
-                det_boxes.shape[0], len(crop_images),
+                det_boxes.shape[0], len(valid_indices),
                 dt_det, dt_crop, dt_cls,
                 rate, eta,
             )
