@@ -61,7 +61,7 @@ def export_classifier():
 
     dummy = torch.randn(1, 3, 518, 518, device="cuda")
 
-    # Step 2: Export FP32 ONNX
+    # Step 2: Export FP32 ONNX (force legacy tracer — dynamo strips weights)
     with torch.no_grad():
         torch.onnx.export(
             model,
@@ -71,6 +71,7 @@ def export_classifier():
             input_names=["input"],
             output_names=["output"],
             dynamic_axes={"input": {0: "batch"}, "output": {0: "batch"}},
+            dynamo=False,
         )
 
     fp32_size = dst_fp32.stat().st_size
