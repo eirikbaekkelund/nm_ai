@@ -162,13 +162,19 @@ def main():
 
     # --- Inference loop ---
     predictions = []
+    import time
+    t_start = time.time()
+    total_detections = 0
+    total_crops = 0
 
-    for img_path in image_paths:
+    for img_idx, img_path in enumerate(image_paths):
+        t_img = time.time()
         image_id = image_id_from_filename(img_path.name)
         img = Image.open(img_path).convert("RGB")
         orig_w, orig_h = img.size
 
         # YOLO detection (native ultralytics handles letterbox internally)
+        t_det = time.time()
         results = yolo.predict(
             source=str(img_path),
             conf=args.detect_conf,
@@ -176,15 +182,23 @@ def main():
             device=device,
             verbose=False,
         )
+        dt_det = time.time() - t_det
 
         if not results or len(results[0].boxes) == 0:
+            if (img_idx + 1) % 50 == 0 or img_idx == 0:
+                logger.info(
+                    "  [%d/%d] %s: 0 detections (det=%.2fs)",
+                    img_idx + 1, len(image_paths), img_path.name, dt_det,
+                )
             continue
 
         boxes = results[0].boxes
         det_boxes = boxes.xyxy.cpu()  # [N, 4] x1,y1,x2,y2
         det_scores = boxes.conf.cpu()  # [N]
+        total_detections += det_boxes.shape[0]
 
         # Crop detections with 5% padding (matches training crops)
+        t_crop = time.time()
         crop_images = []
         valid_indices = []
         for i in range(det_boxes.shape[0]):
@@ -201,11 +215,15 @@ def main():
             crop = img.crop((x1, y1, x2, y2))
             crop_images.append(crop)
             valid_indices.append(i)
+        dt_crop = time.time() - t_crop
 
         if not crop_images:
             continue
 
+        total_crops += len(crop_images)
+
         # Embed → CAQE → Match
+        t_cls = time.time()
         embeddings = embed_crop_images(crop_images, cls_model, device, args.classify_batch)
 
         if args.caqe and len(valid_indices) > 1:
@@ -213,6 +231,7 @@ def main():
             embeddings = apply_caqe(embeddings, valid_boxes, k=args.caqe_k, alpha=args.caqe_alpha)
 
         cat_ids, cos_scores = match_to_refs(embeddings, ref_embs, ref_ids)
+        dt_cls = time.time() - t_cls
 
         for j, vi in enumerate(valid_indices):
             x1, y1, x2, y2 = det_boxes[vi].tolist()
@@ -229,6 +248,26 @@ def main():
                     "score": round(float(det_scores[vi]) * cos_scores[j], 4),
                 }
             )
+
+        if (img_idx + 1) % 25 == 0 or img_idx == 0:
+            elapsed = time.time() - t_start
+            rate = (img_idx + 1) / elapsed
+            eta = (len(image_paths) - img_idx - 1) / rate if rate > 0 else 0
+            logger.info(
+                "  [%d/%d] %d dets, %d crops | det=%.2fs crop=%.2fs cls=%.2fs | "
+                "%.1f img/s, ETA %.0fs",
+                img_idx + 1, len(image_paths),
+                det_boxes.shape[0], len(crop_images),
+                dt_det, dt_crop, dt_cls,
+                rate, eta,
+            )
+
+    elapsed_total = time.time() - t_start
+    logger.info(
+        "Inference complete: %d images, %d detections, %d crops in %.1fs (%.1f img/s)",
+        len(image_paths), total_detections, total_crops, elapsed_total,
+        len(image_paths) / elapsed_total if elapsed_total > 0 else 0,
+    )
 
     # --- Save predictions ---
     output_path = Path(args.output)
