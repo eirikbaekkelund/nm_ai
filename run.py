@@ -31,9 +31,9 @@ from embedder import GroceryEmbedder
 # ── Constants ────────────────────────────────────────────────────────────────
 
 ROOT = Path(__file__).resolve().parent
-YOLO_WEIGHTS = ROOT / "models" / "yolo.onnx"
-CLASSIFIER_WEIGHTS = ROOT / "models" / "classifier.pt"
-REF_EMBEDDINGS = ROOT / "models" / "ref_embeddings.pt"
+YOLO_WEIGHTS = ROOT / "yolo.onnx"
+CLASSIFIER_WEIGHTS = ROOT / "classifier.pt"
+REF_EMBEDDINGS = ROOT / "ref_embeddings.pt"
 
 DETECTOR_IMGSZ = 1280
 CLASSIFIER_RESIZE = 546
