@@ -108,16 +108,13 @@ def match_to_refs(embeddings, ref_embs, ref_ids):
     """Match [N, D] embeddings to refs → (category_ids, cos_scores)."""
     sim = embeddings @ ref_embs.T
     best_scores, best_indices = sim.max(dim=1)
-    category_ids = []
-    cos_scores = []
-    for j in range(embeddings.shape[0]):
-        score = best_scores[j].item()
-        if score < UNKNOWN_THRESHOLD:
-            category_ids.append(UNKNOWN_CATEGORY_ID)
-        else:
-            category_ids.append(ref_ids[best_indices[j]].item())
-        cos_scores.append(score)
-    return category_ids, cos_scores
+    # Vectorized: look up category_id for each best-matching ref
+    matched_cats = ref_ids[best_indices]
+    # Apply unknown threshold
+    if UNKNOWN_THRESHOLD > 0:
+        unknown_mask = best_scores < UNKNOWN_THRESHOLD
+        matched_cats[unknown_mask] = UNKNOWN_CATEGORY_ID
+    return matched_cats.tolist(), best_scores.tolist()
 
 
 def main():
