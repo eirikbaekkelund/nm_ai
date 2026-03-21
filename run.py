@@ -44,6 +44,7 @@ IMAGENET_STD = [0.229, 0.224, 0.225]
 DETECT_CONF = 0.25
 NMS_IOU = 0.7
 CLASSIFY_BATCH = 128
+CROP_BUFFER = 0.05
 UNKNOWN_CATEGORY_ID = 355
 UNKNOWN_THRESHOLD = 0.0
 
@@ -168,15 +169,20 @@ def yolo_postprocess(output, conf_thresh, scale, pad_x, pad_y, orig_h, orig_w):
 
 
 def extract_and_transform_crops(img_tensor, boxes):
-    """Crop, resize, center-crop, normalize for classifier."""
+    """Crop with 5% padding, resize, center-crop, normalize for classifier."""
     _, h, w = img_tensor.shape
     crops = []
     valid_indices = []
 
     for i in range(boxes.shape[0]):
-        x1, y1, x2, y2 = boxes[i].int().tolist()
-        x1, y1 = max(0, x1), max(0, y1)
-        x2, y2 = min(w, x2), min(h, y2)
+        x1, y1, x2, y2 = boxes[i].tolist()
+        bw, bh = x2 - x1, y2 - y1
+        pad_x = bw * CROP_BUFFER
+        pad_y = bh * CROP_BUFFER
+        x1 = max(0, int(x1 - pad_x))
+        y1 = max(0, int(y1 - pad_y))
+        x2 = min(w, int(x2 + pad_x))
+        y2 = min(h, int(y2 + pad_y))
         if x2 <= x1 or y2 <= y1:
             continue
 

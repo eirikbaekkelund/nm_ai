@@ -30,7 +30,7 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
-from vision_task.config import DETECTOR_IMGSZ
+from vision_task.config import CROP_BUFFER, DETECTOR_IMGSZ
 from vision_task.data.transforms import get_eval_transform
 from vision_task.embedder import GroceryEmbedder
 
@@ -188,13 +188,18 @@ def main():
         det_boxes = boxes.xyxy.cpu()  # [N, 4] x1,y1,x2,y2
         det_scores = boxes.conf.cpu()  # [N]
 
-        # Crop detections from original image
+        # Crop detections with 5% padding (matches training crops)
         crop_images = []
         valid_indices = []
         for i in range(det_boxes.shape[0]):
-            x1, y1, x2, y2 = det_boxes[i].int().tolist()
-            x1, y1 = max(0, x1), max(0, y1)
-            x2, y2 = min(orig_w, x2), min(orig_h, y2)
+            x1, y1, x2, y2 = det_boxes[i].tolist()
+            bw, bh = x2 - x1, y2 - y1
+            pad_x = bw * CROP_BUFFER
+            pad_y = bh * CROP_BUFFER
+            x1 = max(0, int(x1 - pad_x))
+            y1 = max(0, int(y1 - pad_y))
+            x2 = min(orig_w, int(x2 + pad_x))
+            y2 = min(orig_h, int(y2 + pad_y))
             if x2 <= x1 or y2 <= y1:
                 continue
             crop = img.crop((x1, y1, x2, y2))
