@@ -3,7 +3,10 @@
 Detects grocery products on shelf images (YOLO ONNX) and classifies
 them (DINOv2 via timm + cosine similarity to reference embeddings).
 
-Imports: argparse, json, pathlib, numpy, PIL, torch, torchvision, onnxruntime, timm.
+SAHI tiled inference for small object recall on large images.
+
+Imports: argparse, json, pathlib, numpy, PIL, torch, torchvision, onnxruntime,
+         timm, ensemble_boxes.
 All sandbox-safe — no banned imports.
 
 Usage (sandbox):
@@ -25,6 +28,7 @@ from torchvision.ops import nms
 from torchvision.transforms import InterpolationMode
 from torchvision.transforms.functional import center_crop, resize
 import onnxruntime as ort
+from ensemble_boxes import weighted_boxes_fusion
 
 from embedder import GroceryEmbedder
 
@@ -48,11 +52,11 @@ CROP_BUFFER = 0.05
 UNKNOWN_CATEGORY_ID = 355
 UNKNOWN_THRESHOLD = 0.0
 
-# CAQE — Context-Aware Query Expansion
-# Ablation showed CAQE hurts classification (neighbor averaging dilutes features).
-# Set k=0 to disable. Keep code path for future experiments.
-CAQE_K = 0
-CAQE_ALPHA = 0.5
+# SAHI — Slicing Aided Hyper Inference
+TILE_SIZE = 640
+TILE_OVERLAP = 0.25
+MIN_DIM_FOR_TILING = 2000
+WBF_IOU_THR = 0.55
 
 _NORM_MEAN = None
 _NORM_STD = None
@@ -162,13 +166,112 @@ def yolo_postprocess(output, conf_thresh, scale, pad_x, pad_y, orig_h, orig_w):
     """Auto-detect YOLO version from output shape and dispatch."""
     shape = output.shape
     if len(shape) == 3 and shape[1] == 5:
-        # YOLO11x: [1, 5, N] — needs NMS
         return yolo11_postprocess(output, conf_thresh, scale, pad_x, pad_y, orig_h, orig_w)
     elif len(shape) == 3 and shape[2] == 6:
-        # YOLO26: [1, 300, 6] — NMS-free
         return yolo26_postprocess(output, conf_thresh, scale, pad_x, pad_y, orig_h, orig_w)
     else:
         raise ValueError(f"Unknown YOLO output shape: {shape}")
+
+
+# ── SAHI tiled detection ───────────────────────────────────────────────────
+
+
+def _run_yolo(yolo_sess, yolo_input_name, img_tensor, conf, device, orig_h, orig_w):
+    """Letterbox + YOLO inference + postprocess on a single image/tile."""
+    lb_tensor, scale, pad_x, pad_y = letterbox(img_tensor, DETECTOR_IMGSZ)
+    lb_np = lb_tensor.unsqueeze(0).cpu().numpy()
+    yolo_out_np = yolo_sess.run(None, {yolo_input_name: lb_np})[0]
+    yolo_out = torch.from_numpy(yolo_out_np).to(device)
+    boxes, scores = yolo_postprocess(
+        yolo_out, conf, scale, pad_x, pad_y, orig_h, orig_w
+    )
+    del lb_tensor, lb_np, yolo_out_np, yolo_out
+    return boxes, scores
+
+
+def generate_tiles(img_h, img_w, tile_size=TILE_SIZE, overlap=TILE_OVERLAP):
+    """Generate (x1, y1, x2, y2) tile coordinates with overlap."""
+    stride = int(tile_size * (1 - overlap))
+    tiles = []
+    for y in range(0, img_h, stride):
+        for x in range(0, img_w, stride):
+            x2 = min(x + tile_size, img_w)
+            y2 = min(y + tile_size, img_h)
+            x1 = max(0, x2 - tile_size)
+            y1 = max(0, y2 - tile_size)
+            tiles.append((x1, y1, x2, y2))
+    return list(dict.fromkeys(tiles))
+
+
+def detect_with_tiles(yolo_sess, yolo_input_name, img_tensor, device, conf=DETECT_CONF):
+    """Full-image + tiled SAHI detection, merged via WBF.
+
+    Returns (boxes_xyxy [N,4], scores [N]) in original image coordinates.
+    """
+    _, orig_h, orig_w = img_tensor.shape
+
+    # Pass 1: full-image at 1280
+    full_boxes, full_scores = _run_yolo(
+        yolo_sess, yolo_input_name, img_tensor, conf, device, orig_h, orig_w
+    )
+
+    # Skip tiling for small images
+    if max(orig_h, orig_w) <= MIN_DIM_FOR_TILING:
+        return full_boxes, full_scores
+
+    # Pass 2: tiled detection
+    tiles = generate_tiles(orig_h, orig_w, TILE_SIZE, TILE_OVERLAP)
+    all_boxes = [full_boxes.cpu().numpy() if full_boxes.shape[0] > 0
+                 else np.empty((0, 4), dtype=np.float32)]
+    all_scores = [full_scores.cpu().numpy() if full_scores.shape[0] > 0
+                  else np.empty((0,), dtype=np.float32)]
+
+    for tx1, ty1, tx2, ty2 in tiles:
+        tile = img_tensor[:, ty1:ty2, tx1:tx2]
+        _, tile_h, tile_w = tile.shape
+        tboxes, tscores = _run_yolo(
+            yolo_sess, yolo_input_name, tile, conf, device, tile_h, tile_w
+        )
+        if tboxes.shape[0] > 0:
+            # Remap tile coords to original image coords
+            tboxes[:, [0, 2]] += tx1
+            tboxes[:, [1, 3]] += ty1
+            tboxes[:, [0, 2]] = tboxes[:, [0, 2]].clamp(0, orig_w)
+            tboxes[:, [1, 3]] = tboxes[:, [1, 3]].clamp(0, orig_h)
+            all_boxes.append(tboxes.cpu().numpy())
+            all_scores.append(tscores.cpu().numpy())
+        else:
+            all_boxes.append(np.empty((0, 4), dtype=np.float32))
+            all_scores.append(np.empty((0,), dtype=np.float32))
+
+    # Merge via WBF (expects [0,1]-normalized coords)
+    boxes_list, scores_list, labels_list = [], [], []
+    for b, s in zip(all_boxes, all_scores):
+        if len(b) == 0:
+            boxes_list.append(np.empty((0, 4), dtype=np.float32))
+            scores_list.append(np.empty((0,), dtype=np.float32))
+            labels_list.append(np.empty((0,), dtype=np.float32))
+            continue
+        nb = b.copy().astype(np.float32)
+        nb[:, [0, 2]] /= orig_w
+        nb[:, [1, 3]] /= orig_h
+        nb = np.clip(nb, 0, 1)
+        boxes_list.append(nb)
+        scores_list.append(s.astype(np.float32))
+        labels_list.append(np.zeros(len(s), dtype=np.float32))
+
+    if all(len(b) == 0 for b in boxes_list):
+        return (torch.empty((0, 4), device=device),
+                torch.empty((0,), device=device))
+
+    fb, fs, _ = weighted_boxes_fusion(
+        boxes_list, scores_list, labels_list,
+        iou_thr=WBF_IOU_THR, skip_box_thr=0.0,
+    )
+    fb[:, [0, 2]] *= orig_w
+    fb[:, [1, 3]] *= orig_h
+    return (torch.from_numpy(fb).float().to(device),
+            torch.from_numpy(fs).float().to(device))
 
 
 # ── Classifier pipeline ─────────────────────────────────────────────────────
@@ -240,25 +343,6 @@ def match_to_refs(embeddings, ref_embs, ref_ids):
     return category_ids, cos_scores
 
 
-def apply_caqe(embeddings, boxes_xyxy, k=CAQE_K, alpha=CAQE_ALPHA):
-    """Context-Aware Query Expansion — inline for sandbox (no extra imports)."""
-    n = embeddings.shape[0]
-    if k <= 0 or n <= 1 or alpha >= 1.0:
-        return embeddings
-    eff_k = min(k, n - 1)
-    centroids = torch.stack([
-        (boxes_xyxy[:, 0] + boxes_xyxy[:, 2]) / 2,
-        (boxes_xyxy[:, 1] + boxes_xyxy[:, 3]) / 2,
-    ], dim=1)
-    dists = torch.cdist(centroids.unsqueeze(0).float(), centroids.unsqueeze(0).float()).squeeze(0)
-    dists.fill_diagonal_(float("inf"))
-    _, nn_indices = dists.topk(eff_k, dim=1, largest=False)
-    neighbor_embs = embeddings[nn_indices]
-    neighbor_mean = neighbor_embs.mean(dim=1)
-    expanded = alpha * embeddings + (1 - alpha) * neighbor_mean
-    return F.normalize(expanded, dim=1)
-
-
 def image_id_from_filename(filename):
     stem = Path(filename).stem
     digits = "".join(c for c in stem if c.isdigit())
@@ -314,24 +398,19 @@ def main():
 
         img_tensor = torch.from_numpy(img_np).permute(2, 0, 1).to(device=device, dtype=torch.float32).div_(255.0)
 
-        # Single-pass detection at 1280
-        lb_tensor, scale, pad_x, pad_y = letterbox(img_tensor, DETECTOR_IMGSZ)
-        lb_np = lb_tensor.unsqueeze(0).cpu().numpy()
-        yolo_out_np = yolo_sess.run(None, {yolo_input_name: lb_np})[0]
-        yolo_out = torch.from_numpy(yolo_out_np).to(device)
-        boxes_xyxy, det_scores = yolo_postprocess(
-            yolo_out, args.detect_conf, scale, pad_x, pad_y, orig_h, orig_w
+        # SAHI: full-image + tiled detection, merged via WBF
+        boxes_xyxy, det_scores = detect_with_tiles(
+            yolo_sess, yolo_input_name,
+            img_tensor, device, conf=args.detect_conf,
         )
-        del lb_tensor, lb_np, yolo_out_np, yolo_out
 
         if boxes_xyxy.shape[0] == 0:
             del img_tensor
             continue
 
-        # Classify crops: embed → CAQE → match
+        # Classify crops
         crop_tensors, valid_indices = extract_and_transform_crops(
-            img_tensor,
-            boxes_xyxy,
+            img_tensor, boxes_xyxy,
         )
         del img_tensor
 
@@ -340,10 +419,6 @@ def main():
 
         embeddings = embed_crops(crop_tensors, cls_model, device)
         del crop_tensors
-
-        # CAQE: expand embeddings with spatial neighbors (disabled when CAQE_K=0)
-        valid_boxes = boxes_xyxy[valid_indices]
-        embeddings = apply_caqe(embeddings, valid_boxes, CAQE_K, CAQE_ALPHA)
 
         cat_ids, cos_scores = match_to_refs(embeddings, ref_embs, ref_ids)
         del embeddings
