@@ -1,5 +1,4 @@
 """
-Classifier training: Phase 4 (linear probe) and Phase 5 (fine-tune).
 
 Phase 4: python -m vision_task.train --epochs 40
 Phase 5: python -m vision_task.train --resume experiments/phase4_linear_probe/best.pt \
@@ -56,7 +55,7 @@ def _auto_num_workers() -> int:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Classifier training (Phase 4 & 5)")
+    parser = argparse.ArgumentParser(description="Classifier training")
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch_size", type=int, default=None, help="Auto-detected from VRAM if not set")
     parser.add_argument("--lr", type=float, default=1e-3, help="ArcFace head learning rate")
@@ -87,6 +86,11 @@ def parse_args():
         type=str,
         default=None,
         help="Path to diagnosis_report.json (auto-detected if not set)",
+    )
+    parser.add_argument(
+        "--final",
+        action="store_true",
+        help="Train on ALL data (no val split) for final submission. Use tuned hyperparams.",
     )
     args = parser.parse_args()
     if args.batch_size is None:
@@ -229,7 +233,10 @@ def main():
 
         logger.info(
             "Hard-negative mining: boost=%.1f, gamma=%.2f, margin=%.2f, %d pairs",
-            args.hn_boost, args.hn_gamma, args.hn_margin, len(confusion_pairs),
+            args.hn_boost,
+            args.hn_gamma,
+            args.hn_margin,
+            len(confusion_pairs),
         )
 
     # --- Data ---
@@ -238,8 +245,11 @@ def main():
         num_workers=args.num_workers,
         confusion_pairs=confusion_pairs,
         hn_boost=args.hn_boost if args.hard_negatives else None,
+        use_all_for_train=args.final,
     )
-    logger.info("Train batches: %d, Val batches: %d", len(train_loader), len(val_loader))
+    if args.final:
+        logger.info("FINAL SUBMISSION MODE: all shelf crops used for training, no validation")
+    logger.info("Train batches: %d, Val batches: %s", len(train_loader), len(val_loader) if val_loader else "N/A")
 
     ref_val_ds = ProductReferenceDataset(
         product_images_dir="data/product_images",
@@ -266,8 +276,9 @@ def main():
         "resume": args.resume,
         "num_workers": args.num_workers,
         "val_every": args.val_every,
+        "final_mode": args.final,
         "train_batches": len(train_loader),
-        "val_batches": len(val_loader),
+        "val_batches": len(val_loader) if val_loader else 0,
         "n_ref_images": len(ref_val_ds),
         "n_ref_products": len(set(ref_val_ds.labels)),
         "n_model_trainable": n_trainable,
@@ -280,6 +291,7 @@ def main():
     # --- Training loop ---
     best_recall1 = 0.0
     best_w_acc = 0.0
+    best_train_loss = float("inf")  # used in --final mode (no val set)
     use_amp = device.type == "cuda"
 
     for epoch in range(args.epochs):
@@ -313,6 +325,7 @@ def main():
             # Hard-negative contrastive loss
             if args.hard_negatives and confusion_pairs:
                 from vision_task.hard_negatives import hard_negative_loss
+
                 hn_loss = hard_negative_loss(embeddings, labels, confusion_pairs, margin=args.hn_margin)
                 loss = arcface_loss + args.hn_gamma * hn_loss
             else:
@@ -352,8 +365,8 @@ def main():
         )
         metrics_fh.flush()
 
-        # --- Validation ---
-        if (epoch + 1) % args.val_every == 0 or epoch == args.epochs - 1:
+        # --- Validation / best-checkpoint ---
+        if val_loader is not None and ((epoch + 1) % args.val_every == 0 or epoch == args.epochs - 1):
             metrics = validate(model, val_loader, ref_val_loader, device, loss_fn=loss_fn)
             w_top1 = metrics.get("w_acc_top1", 0)
             w_top5 = metrics.get("w_acc_top5", 0)
@@ -408,6 +421,25 @@ def main():
                     "  Saved best: R@1=%.4f W_acc@1=%.4f -> %s",
                     metrics["recall@1"],
                     w_top1,
+                    best_path,
+                )
+        elif val_loader is None:
+            # Final mode: no val set — save best on lowest training loss
+            if avg_loss < best_train_loss:
+                best_train_loss = avg_loss
+                checkpoint = {
+                    "epoch": epoch + 1,
+                    "model_state_dict": model.state_dict(),
+                    "loss_fn_state_dict": loss_fn.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                    "metrics": {"train_loss": avg_loss},
+                    "unfreeze_blocks": args.unfreeze_blocks,
+                }
+                best_path = save_dir / "best.pt"
+                torch.save(checkpoint, best_path)
+                logger.info(
+                    "  [final] Saved best: loss=%.4f -> %s",
+                    avg_loss,
                     best_path,
                 )
 

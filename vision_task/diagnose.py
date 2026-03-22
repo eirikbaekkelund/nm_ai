@@ -24,7 +24,7 @@ from PIL import Image
 
 from vision_task.config import CROP_BUFFER, DETECTOR_IMGSZ
 from vision_task.data.transforms import get_eval_transform
-from vision_task.predict import image_id_from_filename, load_classifier
+from vision_task.predict import load_classifier
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +100,8 @@ def match_predictions_to_gt(pred_boxes, gt_boxes, iou_threshold=0.5):
 # ---------------------------------------------------------------------------
 
 SIZE_BUCKETS = [
-    ("tiny", 0, 32**2),         # < 32x32 pixels
-    ("small", 32**2, 64**2),    # 32x32 - 64x64
+    ("tiny", 0, 32**2),  # < 32x32 pixels
+    ("small", 32**2, 64**2),  # 32x32 - 64x64
     ("medium", 64**2, 128**2),  # 64x64 - 128x128
     ("large", 128**2, float("inf")),
 ]
@@ -161,12 +161,14 @@ def classify_batch(crop_pils, model, ref_embs, ref_ids, device, transform, batch
             top5_vals, top5_idx = sim[j].topk(min(5, sim.shape[1]))
             top5_cats = [ref_ids[idx].item() for idx in top5_idx]
             top5_sims = [v.item() for v in top5_vals]
-            results.append({
-                "pred_cat": top5_cats[0],
-                "pred_sim": top5_sims[0],
-                "top5_cats": top5_cats,
-                "top5_sims": top5_sims,
-            })
+            results.append(
+                {
+                    "pred_cat": top5_cats[0],
+                    "pred_sim": top5_sims[0],
+                    "top5_cats": top5_cats,
+                    "top5_sims": top5_sims,
+                }
+            )
     return results
 
 
@@ -193,6 +195,7 @@ def parse_args():
 
 def main():
     import sys
+
     sys.stdout.reconfigure(encoding="utf-8")
     logging.basicConfig(
         level=logging.INFO,
@@ -235,6 +238,7 @@ def main():
 
     # --- Load YOLO ---
     from ultralytics import YOLO
+
     logger.info("Loading YOLO from %s", args.yolo_weights)
     yolo = YOLO(args.yolo_weights)
 
@@ -315,9 +319,7 @@ def main():
             pred_scores = np.empty((0,), dtype=np.float32)
 
         # --- Match predictions to GT ---
-        matches, unmatched_preds, unmatched_gts = match_predictions_to_gt(
-            pred_boxes, gt_boxes, args.iou_threshold
-        )
+        matches, unmatched_preds, unmatched_gts = match_predictions_to_gt(pred_boxes, gt_boxes, args.iou_threshold)
 
         n_tp = len(matches)
         n_fp = len(unmatched_preds)
@@ -331,16 +333,18 @@ def main():
             area = gt_areas[gi]
             bucket = size_bucket(area)
             size_stats[bucket]["fn"] += 1
-            fn_details.append({
-                "image_id": img_id,
-                "filename": fname,
-                "gt_ann_id": gt_anns[gi]["id"],
-                "category_id": gt_cats[gi],
-                "category_name": id_to_catname.get(gt_cats[gi], "?"),
-                "bbox_xywh": gt_anns[gi]["bbox"],
-                "area": float(area),
-                "size_bucket": bucket,
-            })
+            fn_details.append(
+                {
+                    "image_id": img_id,
+                    "filename": fname,
+                    "gt_ann_id": gt_anns[gi]["id"],
+                    "category_id": gt_cats[gi],
+                    "category_name": id_to_catname.get(gt_cats[gi], "?"),
+                    "bbox_xywh": gt_anns[gi]["bbox"],
+                    "area": float(area),
+                    "size_bucket": bucket,
+                }
+            )
 
         # Count total GT and TP per size bucket
         for gi in range(len(gt_anns)):
@@ -352,13 +356,15 @@ def main():
 
         # FP details
         for pi in unmatched_preds:
-            fp_details.append({
-                "image_id": img_id,
-                "filename": fname,
-                "pred_box": pred_boxes[pi].tolist(),
-                "pred_score": float(pred_scores[pi]),
-                "area": float(box_area(pred_boxes[pi])),
-            })
+            fp_details.append(
+                {
+                    "image_id": img_id,
+                    "filename": fname,
+                    "pred_box": pred_boxes[pi].tolist(),
+                    "pred_score": float(pred_scores[pi]),
+                    "area": float(box_area(pred_boxes[pi])),
+                }
+            )
 
         # --- Classify matched detections ---
         if matches:
@@ -406,19 +412,21 @@ def main():
                     else:
                         sim_incorrect.append(sim_score)
                         confusion_pairs[(gt_cat, pred_cat)] += 1
-                        misclassification_details.append({
-                            "image_id": img_id,
-                            "filename": fname,
-                            "gt_cat": gt_cat,
-                            "gt_name": id_to_catname.get(gt_cat, "?"),
-                            "pred_cat": pred_cat,
-                            "pred_name": id_to_catname.get(pred_cat, "?"),
-                            "cosine_sim": round(sim_score, 4),
-                            "top5_cats": cr["top5_cats"],
-                            "top5_sims": [round(s, 4) for s in cr["top5_sims"]],
-                            "iou": round(matched_ious[j], 3),
-                            "det_score": round(matched_pred_scores[j], 4),
-                        })
+                        misclassification_details.append(
+                            {
+                                "image_id": img_id,
+                                "filename": fname,
+                                "gt_cat": gt_cat,
+                                "gt_name": id_to_catname.get(gt_cat, "?"),
+                                "pred_cat": pred_cat,
+                                "pred_name": id_to_catname.get(pred_cat, "?"),
+                                "cosine_sim": round(sim_score, 4),
+                                "top5_cats": cr["top5_cats"],
+                                "top5_sims": [round(s, 4) for s in cr["top5_sims"]],
+                                "iou": round(matched_ious[j], 3),
+                                "det_score": round(matched_pred_scores[j], 4),
+                            }
+                        )
 
         img_result = {
             "image_id": img_id,
@@ -434,7 +442,12 @@ def main():
         per_image_results.append(img_result)
         logger.info(
             "  %s: GT=%d Pred=%d TP=%d FP=%d FN=%d recall=%.2f",
-            fname, len(gt_anns), len(pred_boxes), n_tp, n_fp, n_fn,
+            fname,
+            len(gt_anns),
+            len(pred_boxes),
+            n_tp,
+            n_fp,
+            n_fn,
             img_result["recall"],
         )
 
@@ -445,15 +458,18 @@ def main():
     recall = total_tp / max(total_tp + total_fn, 1)
     precision = total_tp / max(total_tp + total_fp, 1)
     logger.info("TP=%d  FP=%d  FN=%d", total_tp, total_fp, total_fn)
-    logger.info("Recall=%.4f  Precision=%.4f  F1=%.4f",
-                recall, precision, 2 * recall * precision / max(recall + precision, 1e-8))
+    logger.info(
+        "Recall=%.4f  Precision=%.4f  F1=%.4f",
+        recall,
+        precision,
+        2 * recall * precision / max(recall + precision, 1e-8),
+    )
 
     logger.info("\nDetection by size bucket:")
     for name, _, _ in SIZE_BUCKETS:
         s = size_stats[name]
         r = s["tp"] / max(s["total"], 1)
-        logger.info("  %-8s: total=%4d  tp=%4d  fn=%4d  recall=%.3f",
-                     name, s["total"], s["tp"], s["fn"], r)
+        logger.info("  %-8s: total=%4d  tp=%4d  fn=%4d  recall=%.3f", name, s["total"], s["tp"], s["fn"], r)
 
     logger.info("\n" + "=" * 60)
     logger.info("CLASSIFICATION SUMMARY")
@@ -462,11 +478,19 @@ def main():
     logger.info("Accuracy (on matched detections): %d/%d = %.4f", cls_correct, cls_total, cls_acc)
 
     if sim_correct:
-        logger.info("Cosine sim (correct):   mean=%.4f  std=%.4f  min=%.4f",
-                     np.mean(sim_correct), np.std(sim_correct), np.min(sim_correct))
+        logger.info(
+            "Cosine sim (correct):   mean=%.4f  std=%.4f  min=%.4f",
+            np.mean(sim_correct),
+            np.std(sim_correct),
+            np.min(sim_correct),
+        )
     if sim_incorrect:
-        logger.info("Cosine sim (incorrect): mean=%.4f  std=%.4f  max=%.4f",
-                     np.mean(sim_incorrect), np.std(sim_incorrect), np.max(sim_incorrect))
+        logger.info(
+            "Cosine sim (incorrect): mean=%.4f  std=%.4f  max=%.4f",
+            np.mean(sim_incorrect),
+            np.std(sim_incorrect),
+            np.max(sim_incorrect),
+        )
 
     # Per-category accuracy (worst categories)
     per_cat_acc = {}
@@ -487,9 +511,14 @@ def main():
     for cat in worst_cats:
         if cat["total"] < 2:
             continue
-        logger.info("  cat=%3d  acc=%.2f  (%d/%d)  %s",
-                     cat["category_id"], cat["accuracy"],
-                     cat["correct"], cat["total"], cat["name"])
+        logger.info(
+            "  cat=%3d  acc=%.2f  (%d/%d)  %s",
+            cat["category_id"],
+            cat["accuracy"],
+            cat["correct"],
+            cat["total"],
+            cat["name"],
+        )
         shown += 1
         if shown >= 20:
             break
@@ -499,15 +528,13 @@ def main():
     for (gt_cat, pred_cat), count in confusion_pairs.most_common(20):
         gt_name = id_to_catname.get(gt_cat, "?")[:40]
         pred_name = id_to_catname.get(pred_cat, "?")[:40]
-        logger.info("  %3d -> %3d  (%dx)  %s -> %s",
-                     gt_cat, pred_cat, count, gt_name, pred_name)
+        logger.info("  %3d -> %3d  (%dx)  %s -> %s", gt_cat, pred_cat, count, gt_name, pred_name)
 
     # Images with most missed detections
     worst_images = sorted(per_image_results, key=lambda x: x["fn"], reverse=True)
     logger.info("\nImages with most missed detections (FN):")
     for img in worst_images[:10]:
-        logger.info("  %s: FN=%d (of %d GT), recall=%.2f",
-                     img["filename"], img["fn"], img["n_gt"], img["recall"])
+        logger.info("  %s: FN=%d (of %d GT), recall=%.2f", img["filename"], img["fn"], img["n_gt"], img["recall"])
 
     # --- Save detailed JSON report ---
     report = {
@@ -561,19 +588,15 @@ def main():
             }
             for (gt_cat, pred_cat), count in confusion_pairs.most_common(50)
         ],
-        "misclassification_details": sorted(
-            misclassification_details,
-            key=lambda x: x["cosine_sim"],
-            reverse=True,
-        )[:200],  # Top 200 most confident misclassifications
-        "missed_detections": sorted(
-            fn_details,
-            key=lambda x: -x["area"],
-        )[:200],  # Largest missed detections first
-        "false_positives": sorted(
-            fp_details,
-            key=lambda x: -x["pred_score"],
-        )[:100],  # Highest confidence FPs
+        "misclassification_details": sorted(misclassification_details, key=lambda x: x["cosine_sim"], reverse=True,)[
+            :200
+        ],  # Top 200 most confident misclassifications
+        "missed_detections": sorted(fn_details, key=lambda x: -x["area"],)[
+            :200
+        ],  # Largest missed detections first
+        "false_positives": sorted(fp_details, key=lambda x: -x["pred_score"],)[
+            :100
+        ],  # Highest confidence FPs
         "cosine_sim_histogram": {
             "correct": sorted(sim_correct),
             "incorrect": sorted(sim_incorrect),
@@ -623,8 +646,10 @@ def main():
         for cat in worst_cats:
             if cat["total"] < 2:
                 continue
-            f.write(f"    cat={cat['category_id']:3d}  acc={cat['accuracy']:.2f}  "
-                    f"({cat['correct']}/{cat['total']})  {cat['name']}\n")
+            f.write(
+                f"    cat={cat['category_id']:3d}  acc={cat['accuracy']:.2f}  "
+                f"({cat['correct']}/{cat['total']})  {cat['name']}\n"
+            )
             shown += 1
             if shown >= 30:
                 break

@@ -204,8 +204,12 @@ def detect_with_sahi(yolo, img_path, img_np, orig_h, orig_w, device, args):
     """Full-image + tiled SAHI detection via ultralytics, merged with WBF."""
     # Pass 1: full-image
     results = yolo.predict(
-        source=str(img_path), conf=args.detect_conf, imgsz=DETECTOR_IMGSZ,
-        device=device, half=True, verbose=False,
+        source=str(img_path),
+        conf=args.detect_conf,
+        imgsz=DETECTOR_IMGSZ,
+        device=device,
+        half=True,
+        verbose=False,
     )
     if results and len(results[0].boxes) > 0:
         full_boxes = results[0].boxes.xyxy.cpu().numpy()
@@ -216,8 +220,7 @@ def detect_with_sahi(yolo, img_path, img_np, orig_h, orig_w, device, args):
 
     # Skip tiling for small images
     if max(orig_h, orig_w) <= MIN_DIM_FOR_TILING:
-        return (torch.from_numpy(full_boxes).float(),
-                torch.from_numpy(full_scores).float())
+        return (torch.from_numpy(full_boxes).float(), torch.from_numpy(full_scores).float())
 
     # Pass 2: tiled detection
     tiles = generate_tiles(orig_h, orig_w, args.tile_size, args.tile_overlap)
@@ -227,8 +230,12 @@ def detect_with_sahi(yolo, img_path, img_np, orig_h, orig_w, device, args):
     for tx1, ty1, tx2, ty2 in tiles:
         tile_np = img_np[ty1:ty2, tx1:tx2]
         tres = yolo.predict(
-            source=tile_np, conf=args.detect_conf, imgsz=DETECTOR_IMGSZ,
-            device=device, half=True, verbose=False,
+            source=tile_np,
+            conf=args.detect_conf,
+            imgsz=DETECTOR_IMGSZ,
+            device=device,
+            half=True,
+            verbose=False,
         )
         if tres and len(tres[0].boxes) > 0:
             tboxes = tres[0].boxes.xyxy.cpu().numpy()
@@ -264,8 +271,11 @@ def detect_with_sahi(yolo, img_path, img_np, orig_h, orig_w, device, args):
         return (torch.empty((0, 4)), torch.empty((0,)))
 
     fb, fs, _ = weighted_boxes_fusion(
-        boxes_list, scores_list, labels_list,
-        iou_thr=args.wbf_iou, skip_box_thr=0.0,
+        boxes_list,
+        scores_list,
+        labels_list,
+        iou_thr=args.wbf_iou,
+        skip_box_thr=0.0,
     )
     fb[:, [0, 2]] *= orig_w
     fb[:, [1, 3]] *= orig_h
@@ -318,6 +328,7 @@ def main():
     # --- Inference loop ---
     predictions = []
     import time
+
     t_start = time.time()
     total_detections = 0
     total_crops = 0
@@ -333,9 +344,7 @@ def main():
         img_np_arr = np.array(img)
 
         if args.sahi:
-            det_boxes, det_scores = detect_with_sahi(
-                yolo, img_path, img_np_arr, orig_h, orig_w, device, args
-            )
+            det_boxes, det_scores = detect_with_sahi(yolo, img_path, img_np_arr, orig_h, orig_w, device, args)
         else:
             results = yolo.predict(
                 source=str(img_path),
@@ -357,7 +366,10 @@ def main():
             if (img_idx + 1) % 50 == 0 or img_idx == 0:
                 logger.info(
                     "  [%d/%d] %s: 0 detections (det=%.2fs)",
-                    img_idx + 1, len(image_paths), img_path.name, dt_det,
+                    img_idx + 1,
+                    len(image_paths),
+                    img_path.name,
+                    dt_det,
                 )
             continue
 
@@ -365,12 +377,8 @@ def main():
 
         # GPU-side crop + transform (same approach as run.py)
         t_crop = time.time()
-        img_tensor = torch.from_numpy(img_np_arr).permute(2, 0, 1).to(
-            device=device, dtype=torch.float32
-        ).div_(255.0)
-        crop_tensors, valid_indices = extract_and_transform_crops(
-            img_tensor, det_boxes, device
-        )
+        img_tensor = torch.from_numpy(img_np_arr).permute(2, 0, 1).to(device=device, dtype=torch.float32).div_(255.0)
+        crop_tensors, valid_indices = extract_and_transform_crops(img_tensor, det_boxes, device)
         del img_tensor
         dt_crop = time.time() - t_crop
 
@@ -412,18 +420,25 @@ def main():
             rate = (img_idx + 1) / elapsed
             eta = (len(image_paths) - img_idx - 1) / rate if rate > 0 else 0
             logger.info(
-                "  [%d/%d] %d dets, %d crops | det=%.2fs crop=%.2fs cls=%.2fs | "
-                "%.1f img/s, ETA %.0fs",
-                img_idx + 1, len(image_paths),
-                det_boxes.shape[0], len(valid_indices),
-                dt_det, dt_crop, dt_cls,
-                rate, eta,
+                "  [%d/%d] %d dets, %d crops | det=%.2fs crop=%.2fs cls=%.2fs | " "%.1f img/s, ETA %.0fs",
+                img_idx + 1,
+                len(image_paths),
+                det_boxes.shape[0],
+                len(valid_indices),
+                dt_det,
+                dt_crop,
+                dt_cls,
+                rate,
+                eta,
             )
 
     elapsed_total = time.time() - t_start
     logger.info(
         "Inference complete: %d images, %d detections, %d crops in %.1fs (%.1f img/s)",
-        len(image_paths), total_detections, total_crops, elapsed_total,
+        len(image_paths),
+        total_detections,
+        total_crops,
+        elapsed_total,
         len(image_paths) / elapsed_total if elapsed_total > 0 else 0,
     )
 

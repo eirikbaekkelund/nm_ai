@@ -1,11 +1,3 @@
-"""
-DINOv2 ViT-B/14 embedder via timm.
-
-- Dev: falls back to pretrained=True download if local weights missing
-- Sandbox: loads from local .pth file (no network)
-- Forward returns raw CLS token [B, 768] — NO L2 normalization
-"""
-
 import logging
 from pathlib import Path
 
@@ -28,7 +20,6 @@ class GroceryEmbedder(nn.Module):
 
         if weights_path is None:
             # Architecture only — caller will load checkpoint via load_state_dict
-            logger.info("Creating DINOv2 architecture (no weights)")
             self.backbone = timm.create_model(
                 _TIMM_MODEL_NAME,
                 pretrained=False,

@@ -39,10 +39,13 @@ def apply_caqe(
     eff_k = min(k, n - 1)
 
     # Box centroids: [N, 2]
-    centroids = torch.stack([
-        (boxes_xyxy[:, 0] + boxes_xyxy[:, 2]) / 2,
-        (boxes_xyxy[:, 1] + boxes_xyxy[:, 3]) / 2,
-    ], dim=1)
+    centroids = torch.stack(
+        [
+            (boxes_xyxy[:, 0] + boxes_xyxy[:, 2]) / 2,
+            (boxes_xyxy[:, 1] + boxes_xyxy[:, 3]) / 2,
+        ],
+        dim=1,
+    )
 
     # Pairwise L2 distances: [N, N]
     dists = torch.cdist(centroids.unsqueeze(0).float(), centroids.unsqueeze(0).float()).squeeze(0)

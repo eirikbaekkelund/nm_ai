@@ -57,10 +57,10 @@ UNKNOWN_THRESHOLD = 0.0
 CAQE_K = 0
 CAQE_ALPHA = 0.5
 
-# SAHI — Slicing Aided Hyper Inference (light: ~5 tiles/image to fit 300s timeout)
+# SAHI — Disabled: ablation showed it hurts scores
 TILE_SIZE = 2000
 TILE_OVERLAP = 0.15
-MIN_DIM_FOR_TILING = 2000
+MIN_DIM_FOR_TILING = 999999  # effectively disabled
 WBF_IOU_THR = 0.55
 
 _NORM_MEAN = None
@@ -187,9 +187,7 @@ def _run_yolo(yolo_sess, yolo_input_name, yolo_input_dtype, img_tensor, conf, de
     lb_np = lb_tensor.unsqueeze(0).cpu().numpy().astype(yolo_input_dtype)
     yolo_out_np = yolo_sess.run(None, {yolo_input_name: lb_np})[0]
     yolo_out = torch.from_numpy(yolo_out_np).to(device)
-    boxes, scores = yolo_postprocess(
-        yolo_out, conf, scale, pad_x, pad_y, orig_h, orig_w
-    )
+    boxes, scores = yolo_postprocess(yolo_out, conf, scale, pad_x, pad_y, orig_h, orig_w)
     del lb_tensor, lb_np, yolo_out_np, yolo_out
     return boxes, scores
 
@@ -226,17 +224,13 @@ def detect_with_tiles(yolo_sess, yolo_input_name, yolo_input_dtype, img_tensor, 
 
     # Pass 2: tiled detection
     tiles = generate_tiles(orig_h, orig_w, TILE_SIZE, TILE_OVERLAP)
-    all_boxes = [full_boxes.cpu().numpy() if full_boxes.shape[0] > 0
-                 else np.empty((0, 4), dtype=np.float32)]
-    all_scores = [full_scores.cpu().numpy() if full_scores.shape[0] > 0
-                  else np.empty((0,), dtype=np.float32)]
+    all_boxes = [full_boxes.cpu().numpy() if full_boxes.shape[0] > 0 else np.empty((0, 4), dtype=np.float32)]
+    all_scores = [full_scores.cpu().numpy() if full_scores.shape[0] > 0 else np.empty((0,), dtype=np.float32)]
 
     for tx1, ty1, tx2, ty2 in tiles:
         tile = img_tensor[:, ty1:ty2, tx1:tx2]
         _, tile_h, tile_w = tile.shape
-        tboxes, tscores = _run_yolo(
-            yolo_sess, yolo_input_name, yolo_input_dtype, tile, conf, device, tile_h, tile_w
-        )
+        tboxes, tscores = _run_yolo(yolo_sess, yolo_input_name, yolo_input_dtype, tile, conf, device, tile_h, tile_w)
         if tboxes.shape[0] > 0:
             # Remap tile coords to original image coords
             tboxes[:, [0, 2]] += tx1
@@ -266,17 +260,18 @@ def detect_with_tiles(yolo_sess, yolo_input_name, yolo_input_dtype, img_tensor, 
         labels_list.append(np.zeros(len(s), dtype=np.float32))
 
     if all(len(b) == 0 for b in boxes_list):
-        return (torch.empty((0, 4), device=device),
-                torch.empty((0,), device=device))
+        return (torch.empty((0, 4), device=device), torch.empty((0,), device=device))
 
     fb, fs, _ = weighted_boxes_fusion(
-        boxes_list, scores_list, labels_list,
-        iou_thr=WBF_IOU_THR, skip_box_thr=0.0,
+        boxes_list,
+        scores_list,
+        labels_list,
+        iou_thr=WBF_IOU_THR,
+        skip_box_thr=0.0,
     )
     fb[:, [0, 2]] *= orig_w
     fb[:, [1, 3]] *= orig_h
-    return (torch.from_numpy(fb).float().to(device),
-            torch.from_numpy(fs).float().to(device))
+    return (torch.from_numpy(fb).float().to(device), torch.from_numpy(fs).float().to(device))
 
 
 # ── Classifier pipeline ─────────────────────────────────────────────────────
@@ -321,13 +316,13 @@ def extract_and_transform_crops(img_tensor, boxes):
 
 @torch.no_grad()
 def embed_crops(crop_tensors, model, device):
-    """Embed all crops → [N, D] L2-normalized embeddings."""
+    """Embed all crops → [N, D] L2-normalized embeddings (FP16)."""
     all_embs = []
     n = crop_tensors.shape[0]
     for i in range(0, n, CLASSIFY_BATCH):
-        batch = crop_tensors[i : i + CLASSIFY_BATCH].to(device)
+        batch = crop_tensors[i : i + CLASSIFY_BATCH].to(device, dtype=torch.float16)
         embs = model(batch)
-        embs = F.normalize(embs.float(), dim=1)
+        embs = F.normalize(embs.float(), dim=1).half()
         all_embs.append(embs)
     return torch.cat(all_embs, dim=0)
 
@@ -338,10 +333,13 @@ def apply_caqe(embeddings, boxes_xyxy, k=CAQE_K, alpha=CAQE_ALPHA):
     if k <= 0 or n <= 1 or alpha >= 1.0:
         return embeddings
     eff_k = min(k, n - 1)
-    centroids = torch.stack([
-        (boxes_xyxy[:, 0] + boxes_xyxy[:, 2]) / 2,
-        (boxes_xyxy[:, 1] + boxes_xyxy[:, 3]) / 2,
-    ], dim=1)
+    centroids = torch.stack(
+        [
+            (boxes_xyxy[:, 0] + boxes_xyxy[:, 2]) / 2,
+            (boxes_xyxy[:, 1] + boxes_xyxy[:, 3]) / 2,
+        ],
+        dim=1,
+    )
     dists = torch.cdist(centroids.unsqueeze(0).float(), centroids.unsqueeze(0).float()).squeeze(0)
     dists.fill_diagonal_(float("inf"))
     _, nn_indices = dists.topk(eff_k, dim=1, largest=False)
@@ -351,19 +349,13 @@ def apply_caqe(embeddings, boxes_xyxy, k=CAQE_K, alpha=CAQE_ALPHA):
 
 
 def match_to_refs(embeddings, ref_embs, ref_ids):
-    """Match [N, D] embeddings to refs → (category_ids, cos_scores)."""
-    sim = embeddings @ ref_embs.T
+    """Match [N, D] embeddings to refs → (category_ids, cos_scores). Fully vectorized."""
+    sim = embeddings.float() @ ref_embs.float().T
     best_scores, best_indices = sim.max(dim=1)
-    category_ids = []
-    cos_scores = []
-    for j in range(embeddings.shape[0]):
-        score = best_scores[j].item()
-        if score < UNKNOWN_THRESHOLD:
-            category_ids.append(UNKNOWN_CATEGORY_ID)
-        else:
-            category_ids.append(ref_ids[best_indices[j]].item())
-        cos_scores.append(score)
-    return category_ids, cos_scores
+    matched_cats = ref_ids[best_indices]
+    if UNKNOWN_THRESHOLD > 0:
+        matched_cats[best_scores < UNKNOWN_THRESHOLD] = UNKNOWN_CATEGORY_ID
+    return matched_cats, best_scores
 
 
 def image_id_from_filename(filename):
@@ -389,25 +381,23 @@ def main():
     yolo_sess = ort.InferenceSession(str(YOLO_WEIGHTS), providers=providers)
     yolo_input_name = yolo_sess.get_inputs()[0].name
 
-    # Probe YOLO input dtype (FP16 or FP32) and output shape
+    # Detect YOLO input dtype from model metadata (skip costly probe forward pass)
     yolo_input_type = yolo_sess.get_inputs()[0].type
     yolo_input_dtype = np.float16 if "float16" in yolo_input_type else np.float32
-    probe_input = np.zeros((1, 3, DETECTOR_IMGSZ, DETECTOR_IMGSZ), dtype=yolo_input_dtype)
-    probe_out = yolo_sess.run(None, {yolo_input_name: probe_input})[0]
-    yolo_version = "YOLO26" if probe_out.shape[-1] == 6 else "YOLO11"
-    print(f"YOLO: {yolo_version}, dtype: {yolo_input_dtype.__name__}, output shape: {probe_out.shape}")
-    del probe_out
 
     # Load native DINOv2 classifier
     cls_model = GroceryEmbedder()
     sd = torch.load(str(CLASSIFIER_WEIGHTS), map_location="cpu", weights_only=True)
+    # Upcast FP16 weights to FP32 then convert model to FP16 for fast inference
+    sd = {k: v.float() for k, v in sd.items()}
     cls_model.load_state_dict(sd)
-    cls_model = cls_model.to(device).eval()
+    cls_model = cls_model.to(device).half().eval()
+    del sd
 
-    # Load reference embeddings
+    # Load reference embeddings — keep as FP16 for faster matmul
     ref_data = torch.load(str(REF_EMBEDDINGS), map_location=device, weights_only=True)
-    ref_embs = F.normalize(ref_data["embeddings"].to(device).float(), dim=1)
-    ref_ids = ref_data["category_ids"]
+    ref_embs = F.normalize(ref_data["embeddings"].to(device).float(), dim=1).half()
+    ref_ids = ref_data["category_ids"].to(device)
 
     input_dir = Path(args.input_dir)
     image_paths = sorted(
@@ -416,61 +406,80 @@ def main():
 
     predictions = []
 
-    for img_path in image_paths:
-        img_np = np.array(Image.open(img_path).convert("RGB"))
-        image_id = image_id_from_filename(img_path.name)
-        orig_h, orig_w = img_np.shape[:2]
+    with torch.inference_mode():
+        for img_path in image_paths:
+            img_np = np.array(Image.open(img_path).convert("RGB"))
+            image_id = image_id_from_filename(img_path.name)
+            orig_h, orig_w = img_np.shape[:2]
 
-        img_tensor = torch.from_numpy(img_np).permute(2, 0, 1).to(device=device, dtype=torch.float32).div_(255.0)
+            img_tensor = torch.from_numpy(img_np).permute(2, 0, 1).to(device=device, dtype=torch.float32).div_(255.0)
 
-        # SAHI: full-image + tiled detection, merged via WBF
-        boxes_xyxy, det_scores = detect_with_tiles(
-            yolo_sess, yolo_input_name, yolo_input_dtype,
-            img_tensor, device, conf=args.detect_conf,
-        )
-
-        if boxes_xyxy.shape[0] == 0:
-            del img_tensor
-            continue
-
-        # Classify crops
-        crop_tensors, valid_indices = extract_and_transform_crops(
-            img_tensor, boxes_xyxy,
-        )
-        del img_tensor
-
-        if crop_tensors is None:
-            continue
-
-        embeddings = embed_crops(crop_tensors, cls_model, device)
-        del crop_tensors
-
-        # CAQE: expand embeddings with spatial context from neighbors
-        if CAQE_K > 0 and len(valid_indices) > 1:
-            valid_boxes = boxes_xyxy[valid_indices]
-            embeddings = apply_caqe(embeddings, valid_boxes, k=CAQE_K, alpha=CAQE_ALPHA)
-
-        cat_ids, cos_scores = match_to_refs(embeddings, ref_embs, ref_ids)
-        del embeddings
-
-        for j, vi in enumerate(valid_indices):
-            x1, y1, x2, y2 = boxes_xyxy[vi].tolist()
-            score_val = float(det_scores[vi]) * cos_scores[j]
-            if not np.isfinite(score_val):
-                score_val = 0.0001
-            predictions.append(
-                {
-                    "image_id": image_id,
-                    "category_id": cat_ids[j],
-                    "bbox": [
-                        round(x1, 2),
-                        round(y1, 2),
-                        round(x2 - x1, 2),
-                        round(y2 - y1, 2),
-                    ],
-                    "score": round(score_val, 4),
-                }
+            # Detection: full-image pass (SAHI disabled)
+            boxes_xyxy, det_scores = detect_with_tiles(
+                yolo_sess,
+                yolo_input_name,
+                yolo_input_dtype,
+                img_tensor,
+                device,
+                conf=args.detect_conf,
             )
+
+            if boxes_xyxy.shape[0] == 0:
+                del img_tensor
+                continue
+
+            # Classify crops
+            crop_tensors, valid_indices = extract_and_transform_crops(
+                img_tensor,
+                boxes_xyxy,
+            )
+            del img_tensor
+
+            if crop_tensors is None:
+                continue
+
+            embeddings = embed_crops(crop_tensors, cls_model, device)
+            del crop_tensors
+
+            # CAQE: expand embeddings with spatial context from neighbors
+            if CAQE_K > 0 and len(valid_indices) > 1:
+                valid_boxes = boxes_xyxy[valid_indices]
+                embeddings = apply_caqe(embeddings, valid_boxes, k=CAQE_K, alpha=CAQE_ALPHA)
+
+            matched_cats, cos_scores = match_to_refs(embeddings, ref_embs, ref_ids)
+            del embeddings
+
+            # Vectorized prediction building
+            vi_t = torch.tensor(valid_indices, device=device)
+            valid_boxes = boxes_xyxy[vi_t]  # [M, 4] x1,y1,x2,y2
+            valid_det_scores = det_scores[vi_t]
+            combined_scores = valid_det_scores * cos_scores
+            # Convert xyxy → xywh
+            bboxes_xywh = torch.stack(
+                [
+                    valid_boxes[:, 0],
+                    valid_boxes[:, 1],
+                    valid_boxes[:, 2] - valid_boxes[:, 0],
+                    valid_boxes[:, 3] - valid_boxes[:, 1],
+                ],
+                dim=1,
+            )
+            # Move to CPU once for all predictions in this image
+            bboxes_np = bboxes_xywh.cpu().numpy()
+            scores_np = combined_scores.cpu().numpy()
+            cats_np = matched_cats.cpu().numpy()
+            for j in range(len(valid_indices)):
+                s = float(scores_np[j])
+                if not np.isfinite(s):
+                    s = 0.0001
+                predictions.append(
+                    {
+                        "image_id": image_id,
+                        "category_id": int(cats_np[j]),
+                        "bbox": [round(float(bboxes_np[j, c]), 2) for c in range(4)],
+                        "score": round(s, 4),
+                    }
+                )
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()

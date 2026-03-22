@@ -41,7 +41,6 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-from vision_task.config import CLASSIFIER_SIZE, CLASSIFIER_RESIZE
 from vision_task.data.datasets import (
     PreExtractedCropDataset,
     TransformWrapper,
@@ -206,7 +205,7 @@ def main():
     train_ds = TransformWrapper(full_ds, train_indices, get_eval_transform())
 
     logger.info(
-        "Train shelf crops: %d (from %d total, %d val excluded)",
+        "Shelf crops for mining: %d (from %d total, %d excluded)",
         len(train_ds),
         len(full_ds),
         len(val_indices),
@@ -225,7 +224,7 @@ def main():
     all_embs = F.normalize(all_embs.float(), dim=1)
     logger.info("Embedded %d crops → %s", all_embs.shape[0], all_embs.shape)
 
-    # ── Determine which categories have product refs ──────────────────────────
+    # which categories have product refs
     product_ref_cats = set()
     if args.merge and Path(args.merge).exists():
         existing = torch.load(args.merge, map_location="cpu", weights_only=True)
@@ -236,7 +235,7 @@ def main():
             len(product_ref_cats),
         )
 
-    # ── Build per-category product ref centroids (for confirmed selection) ───
+    # per-category product ref centroids
     ref_cat_embs = {}
     if args.merge and Path(args.merge).exists():
         for cat_id in product_ref_cats:
@@ -244,7 +243,6 @@ def main():
             cat_refs = F.normalize(existing["embeddings"][mask].float(), dim=1)
             ref_cat_embs[cat_id] = cat_refs
 
-    # ── Group by category and select ──────────────────────────────────────────
     cat_to_indices = defaultdict(list)
     for i, lbl in enumerate(all_labels.tolist()):
         cat_to_indices[lbl].append(i)
@@ -333,9 +331,7 @@ def main():
 
     # ── Merge with existing product refs ──────────────────────────────────────
     if args.merge and Path(args.merge).exists():
-        combined_embs = torch.cat(
-            [F.normalize(existing["embeddings"].float(), dim=1), shelf_embs], dim=0
-        )
+        combined_embs = torch.cat([F.normalize(existing["embeddings"].float(), dim=1), shelf_embs], dim=0)
         combined_labels = torch.cat([existing["category_ids"], shelf_labels], dim=0)
         n_product = existing["embeddings"].shape[0]
     else:

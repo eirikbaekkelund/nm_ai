@@ -27,6 +27,7 @@ def create_dataloaders(
     exclude_unknown=True,
     confusion_pairs=None,
     hn_boost=None,
+    use_all_for_train=False,
 ):
     """Create training and validation dataloaders.
 
@@ -37,9 +38,11 @@ def create_dataloaders(
         confusion_pairs: if set, use HardNegativeSampler instead of BalancedConcatSampler.
             List of (cat_a, cat_b, count) tuples.
         hn_boost: boost factor for HardNegativeSampler (default 3.0).
+        use_all_for_train: if True, use all shelf crops for training (no val split).
+            For final submission when hyperparameters are already tuned.
 
     Returns:
-        (train_loader, val_loader)
+        (train_loader, val_loader) — val_loader is None when use_all_for_train=True
     """
     train_transform = get_train_transform()
     eval_transform = get_eval_transform()
@@ -53,11 +56,15 @@ def create_dataloaders(
     )
 
     # Image-level train/val split matching YOLO
-    train_indices, val_indices = get_train_val_indices(shelf_ds)
+    if use_all_for_train:
+        train_indices = list(range(len(shelf_ds)))
+        val_indices = []
+    else:
+        train_indices, val_indices = get_train_val_indices(shelf_ds)
 
     # Wrap splits with appropriate transforms
     shelf_train = TransformWrapper(shelf_ds, train_indices, train_transform)
-    shelf_val = TransformWrapper(shelf_ds, val_indices, eval_transform)
+    shelf_val = TransformWrapper(shelf_ds, val_indices, eval_transform) if val_indices else None
 
     # Reference images with train transform
     ref_ds = ProductReferenceDataset(
@@ -104,14 +111,17 @@ def create_dataloaders(
         **worker_kwargs,
     )
 
-    val_loader = DataLoader(
-        shelf_val,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True,
-        drop_last=False,
-        **worker_kwargs,
-    )
+    if shelf_val is not None:
+        val_loader = DataLoader(
+            shelf_val,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=True,
+            drop_last=False,
+            **worker_kwargs,
+        )
+    else:
+        val_loader = None
 
     return train_loader, val_loader

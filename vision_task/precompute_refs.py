@@ -114,8 +114,14 @@ def parse_args():
     parser.add_argument(
         "--output",
         type=str,
-        default="models/ref_embeddings.pt",
-        help="Output path for reference embeddings",
+        default=None,
+        help="Output path for reference embeddings (auto-generated from tag if not set)",
+    )
+    parser.add_argument(
+        "--tag",
+        type=str,
+        default=None,
+        help="Name tag for output file (e.g. 'phase7' -> ref_embeddings_phase7.pt)",
     )
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--num_workers", type=int, default=8)
@@ -150,6 +156,14 @@ def main():
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     args = parse_args()
+
+    # Resolve output path from --output or --tag
+    if args.output:
+        pass  # explicit path takes priority
+    elif args.tag:
+        args.output = f"models/ref_embeddings_{args.tag}.pt"
+    else:
+        args.output = "models/ref_embeddings.pt"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info("Device: %s", device)

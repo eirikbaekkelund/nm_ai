@@ -31,6 +31,7 @@ def parse_args():
 
 def main():
     import sys
+
     sys.stdout.reconfigure(encoding="utf-8")
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = parse_args()
@@ -56,6 +57,7 @@ def main():
         pairs = [(p["gt_cat"], p["pred_cat"], p["count"]) for p in report["top_confusion_pairs"]]
     else:
         from vision_task.hard_negatives import FALLBACK_CONFUSION_PAIRS
+
         pairs = FALLBACK_CONFUSION_PAIRS
 
     # ── Per-category self-similarity (intra-class) ──
@@ -68,7 +70,7 @@ def main():
         embs = ref_embs[mask]
         cat_centroids[cat_id] = F.normalize(embs.mean(dim=0, keepdim=True), dim=1)
         if embs.shape[0] > 1:
-            intra_sim = (embs @ embs.T)
+            intra_sim = embs @ embs.T
             # Get off-diagonal elements
             n = embs.shape[0]
             off_diag = intra_sim[~torch.eye(n, dtype=torch.bool)].tolist()
@@ -78,16 +80,22 @@ def main():
         # Only print for confused categories
         for a, b, count in pairs[:20]:
             if cat_id in (a, b):
-                logger.info("  cat=%3d (%d refs) intra_sim=%.4f  %s",
-                            cat_id, embs.shape[0], mean_intra,
-                            id_to_name.get(cat_id, "?")[:50])
+                logger.info(
+                    "  cat=%3d (%d refs) intra_sim=%.4f  %s",
+                    cat_id,
+                    embs.shape[0],
+                    mean_intra,
+                    id_to_name.get(cat_id, "?")[:50],
+                )
                 break
 
     # ── Cross-category similarity for confused pairs ──
     logger.info("\n" + "=" * 80)
     logger.info("CROSS-CATEGORY SIMILARITY (confused pairs — should be LOW if separable)")
     logger.info("=" * 80)
-    logger.info(f"{'gt':>5} {'pred':>5} {'cnt':>4} | {'max_cross':>9} {'mean_cross':>10} {'margin':>7} | gt_name -> pred_name")
+    logger.info(
+        f"{'gt':>5} {'pred':>5} {'cnt':>4} | {'max_cross':>9} {'mean_cross':>10} {'margin':>7} | gt_name -> pred_name"
+    )
     logger.info("-" * 100)
 
     for gt_cat, pred_cat, count in pairs[:25]:
@@ -97,8 +105,10 @@ def main():
         n_b = mask_b.sum().item()
 
         if n_a == 0 or n_b == 0:
-            logger.info(f"{gt_cat:>5} {pred_cat:>5} {count:>4} | {'NO REFS':>9} {'':>10} {'':>7} | "
-                        f"{id_to_name.get(gt_cat, '?')[:30]} -> {id_to_name.get(pred_cat, '?')[:30]}")
+            logger.info(
+                f"{gt_cat:>5} {pred_cat:>5} {count:>4} | {'NO REFS':>9} {'':>10} {'':>7} | "
+                f"{id_to_name.get(gt_cat, '?')[:30]} -> {id_to_name.get(pred_cat, '?')[:30]}"
+            )
             continue
 
         embs_a = ref_embs[mask_a]
@@ -117,8 +127,10 @@ def main():
         else:
             margin = float("nan")
 
-        logger.info(f"{gt_cat:>5} {pred_cat:>5} {count:>4} | {max_cross:>9.4f} {mean_cross:>10.4f} {margin:>7.4f} | "
-                    f"{id_to_name.get(gt_cat, '?')[:30]} -> {id_to_name.get(pred_cat, '?')[:30]}")
+        logger.info(
+            f"{gt_cat:>5} {pred_cat:>5} {count:>4} | {max_cross:>9.4f} {mean_cross:>10.4f} {margin:>7.4f} | "
+            f"{id_to_name.get(gt_cat, '?')[:30]} -> {id_to_name.get(pred_cat, '?')[:30]}"
+        )
 
     # ── Global stats: what's a "normal" cross-category similarity? ──
     logger.info("\n" + "=" * 80)
@@ -128,6 +140,7 @@ def main():
     # Sample 200 random non-confused category pairs for baseline
     unique_cats = ref_ids.unique().tolist()
     import random
+
     rng = random.Random(42)
     random_sims = []
     for _ in range(200):
@@ -143,12 +156,14 @@ def main():
 
     if random_sims:
         random_sims.sort()
-        logger.info("Random pair similarity: mean=%.4f, std=%.4f, p50=%.4f, p95=%.4f, max=%.4f",
-                    sum(random_sims)/len(random_sims),
-                    (sum((s - sum(random_sims)/len(random_sims))**2 for s in random_sims)/len(random_sims))**0.5,
-                    random_sims[len(random_sims)//2],
-                    random_sims[int(len(random_sims)*0.95)],
-                    random_sims[-1])
+        logger.info(
+            "Random pair similarity: mean=%.4f, std=%.4f, p50=%.4f, p95=%.4f, max=%.4f",
+            sum(random_sims) / len(random_sims),
+            (sum((s - sum(random_sims) / len(random_sims)) ** 2 for s in random_sims) / len(random_sims)) ** 0.5,
+            random_sims[len(random_sims) // 2],
+            random_sims[int(len(random_sims) * 0.95)],
+            random_sims[-1],
+        )
 
     # ── Verdict ──
     logger.info("\n" + "=" * 80)

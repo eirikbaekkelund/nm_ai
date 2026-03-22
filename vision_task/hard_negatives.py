@@ -56,11 +56,7 @@ def load_confusion_pairs(diagnosis_path: str, min_count: int = 3) -> list:
         key = (min(a, b), max(a, b))
         merged[key] += entry["count"]
 
-    pairs = [
-        (a, b, count)
-        for (a, b), count in merged.items()
-        if count >= min_count
-    ]
+    pairs = [(a, b, count) for (a, b), count in merged.items() if count >= min_count]
     pairs.sort(key=lambda x: -x[2])
     return pairs
 
@@ -69,20 +65,20 @@ def load_confusion_pairs(diagnosis_path: str, min_count: int = 3) -> list:
 FALLBACK_CONFUSION_PAIRS = [
     # ALI variants
     (160, 171, 21),  # ALI ORIGINAL KOKMALT ↔ FILTERMALT
-    (160, 198, 3),   # ALI ORIGINAL KOKMALT ↔ KAFFEPUTER
+    (160, 198, 3),  # ALI ORIGINAL KOKMALT ↔ KAFFEPUTER
     # EVERGOOD variants
     (100, 304, 20),  # EVERGOOD CLASSIC FILTERMALT ↔ KOKMALT
-    (49, 347, 12),   # EVERGOOD DARK ROAST FILTERMALT ↔ PRESSMALT
-    (100, 141, 3),   # EVERGOOD CLASSIC FILTERMALT ↔ PRESSMALT
+    (49, 347, 12),  # EVERGOOD DARK ROAST FILTERMALT ↔ PRESSMALT
+    (100, 141, 3),  # EVERGOOD CLASSIC FILTERMALT ↔ PRESSMALT
     # Other high-count pairs
-    (30, 308, 10),   # SJOKORINGER ↔ HAVREGRANOLA
-    (253, 224, 5),   # SOFT FLORA LETT 235G ↔ 540G
-    (21, 39, 4),     # KNEKKEBRØD SESAM ↔ KANEL
-    (261, 260, 3),   # MÜSLI HASSELNØTT ↔ ENERGI
-    (155, 295, 3),   # MELANGE M/SMØR ↔ MELANGE FLYTENDE
-    (325, 178, 2),   # NESCAFE GULL ↔ GOLD ORGANIC
-    (27, 189, 2),    # YELLOW LABEL 50POS ↔ 25POS
-    (100, 40, 2),    # EVERGOOD CLASSIC ↔ FRIELE FROKOST
+    (30, 308, 10),  # SJOKORINGER ↔ HAVREGRANOLA
+    (253, 224, 5),  # SOFT FLORA LETT 235G ↔ 540G
+    (21, 39, 4),  # KNEKKEBRØD SESAM ↔ KANEL
+    (261, 260, 3),  # MÜSLI HASSELNØTT ↔ ENERGI
+    (155, 295, 3),  # MELANGE M/SMØR ↔ MELANGE FLYTENDE
+    (325, 178, 2),  # NESCAFE GULL ↔ GOLD ORGANIC
+    (27, 189, 2),  # YELLOW LABEL 50POS ↔ 25POS
+    (100, 40, 2),  # EVERGOOD CLASSIC ↔ FRIELE FROKOST
 ]
 
 

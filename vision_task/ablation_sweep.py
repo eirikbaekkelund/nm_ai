@@ -409,8 +409,9 @@ class EmbeddingStore:
     This reduces ~14 DINOv2 forward passes to just 2-3 (one per unique combo).
     """
 
-    def __init__(self, det_cache: DetectionCache, cls_model, ref_embs, ref_ids,
-                 device, image_paths: list, batch_size: int = 128):
+    def __init__(
+        self, det_cache: DetectionCache, cls_model, ref_embs, ref_ids, device, image_paths: list, batch_size: int = 128
+    ):
         self._det_cache = det_cache
         self._cls_model = cls_model
         self._ref_embs = ref_embs
@@ -445,30 +446,32 @@ class EmbeddingStore:
             if len(scales) == 1:
                 boxes, det_scores = detect_single_scale(self._det_cache, img_path, scales[0], min_conf)
             else:
-                boxes, det_scores = detect_multiscale_wbf(
-                    self._det_cache, img_path, scales, min_conf, img_w, img_h
-                )
+                boxes, det_scores = detect_multiscale_wbf(self._det_cache, img_path, scales, min_conf, img_w, img_h)
 
             if len(boxes) == 0:
-                per_image_data.append({
-                    "image_id": image_id,
-                    "boxes": np.empty((0, 4), dtype=np.float32),
-                    "det_scores": np.empty((0,), dtype=np.float32),
-                    "valid_indices": [],
-                    "embeddings": None,
-                })
+                per_image_data.append(
+                    {
+                        "image_id": image_id,
+                        "boxes": np.empty((0, 4), dtype=np.float32),
+                        "det_scores": np.empty((0,), dtype=np.float32),
+                        "valid_indices": [],
+                        "embeddings": None,
+                    }
+                )
                 continue
 
             # Crop
             crops, valid_indices = extract_crops(img, boxes)
             if not crops:
-                per_image_data.append({
-                    "image_id": image_id,
-                    "boxes": boxes,
-                    "det_scores": det_scores,
-                    "valid_indices": [],
-                    "embeddings": None,
-                })
+                per_image_data.append(
+                    {
+                        "image_id": image_id,
+                        "boxes": boxes,
+                        "det_scores": det_scores,
+                        "valid_indices": [],
+                        "embeddings": None,
+                    }
+                )
                 continue
 
             # Embed
@@ -478,13 +481,15 @@ class EmbeddingStore:
                 embs = embed_crops_standard(crops, self._cls_model, self._device, self._batch_size)
 
             total_crops += len(crops)
-            per_image_data.append({
-                "image_id": image_id,
-                "boxes": boxes,
-                "det_scores": det_scores,
-                "valid_indices": valid_indices,
-                "embeddings": embs,
-            })
+            per_image_data.append(
+                {
+                    "image_id": image_id,
+                    "boxes": boxes,
+                    "det_scores": det_scores,
+                    "valid_indices": valid_indices,
+                    "embeddings": embs,
+                }
+            )
 
         self._cache[key] = per_image_data
         logger.info("  Embedded %d crops in %.1fs", total_crops, time.time() - t0)
@@ -526,24 +531,25 @@ class EmbeddingStore:
 
             # Classify (just matching — no DINOv2 forward pass)
             cat_ids, cos_scores = classify_knn(
-                kept_embs, self._ref_embs, self._ref_ids,
-                config.knn_k, config.unknown_threshold
+                kept_embs, self._ref_embs, self._ref_ids, config.knn_k, config.unknown_threshold
             )
 
             # Build predictions
             for j, vi in enumerate(kept_vi):
                 x1, y1, x2, y2 = boxes[vi]
-                predictions.append({
-                    "image_id": image_id,
-                    "category_id": cat_ids[j],
-                    "bbox": [
-                        round(float(x1), 2),
-                        round(float(y1), 2),
-                        round(float(x2 - x1), 2),
-                        round(float(y2 - y1), 2),
-                    ],
-                    "score": round(float(det_scores[vi]) * cos_scores[j], 4),
-                })
+                predictions.append(
+                    {
+                        "image_id": image_id,
+                        "category_id": cat_ids[j],
+                        "bbox": [
+                            round(float(x1), 2),
+                            round(float(y1), 2),
+                            round(float(x2 - x1), 2),
+                            round(float(y2 - y1), 2),
+                        ],
+                        "score": round(float(det_scores[vi]) * cos_scores[j], 4),
+                    }
+                )
 
         return evaluate_coco_map(predictions, det_gt, cls_gt)
 

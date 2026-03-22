@@ -48,7 +48,7 @@ $$L_{total} = L_{ArcFace} + α · L_{cosine} + β · L_{RKD-dist}$$
 - Silhouette Score on embedding clusters
 - UMAP visualization (not T-SNE)
 
-## Ablation Matrix
+## Ablation
 | Parameter | Values |
 |-----------|--------|
 | ArcFace margin | [0.3, 0.5, 0.7] rad |

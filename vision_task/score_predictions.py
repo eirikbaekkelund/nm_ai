@@ -80,6 +80,7 @@ def coco_to_xyxy(bbox):
 def get_val_image_ids(annotations):
     """Reproduce the val split (seed=42, 15%) at the image level."""
     import random
+
     all_image_ids = sorted(img["id"] for img in annotations["images"])
     rng = random.Random(42)
     rng.shuffle(all_image_ids)
@@ -121,15 +122,21 @@ def score_file(pred_path, annotations, id_to_catname, val_image_ids=None):
         gt_anns = gt_by_image.get(img_id, [])
         preds = preds_by_image.get(img_id, [])
 
-        gt_boxes = np.array([coco_to_xyxy(a["bbox"]) for a in gt_anns], dtype=np.float32) if gt_anns else np.empty((0, 4), dtype=np.float32)
+        gt_boxes = (
+            np.array([coco_to_xyxy(a["bbox"]) for a in gt_anns], dtype=np.float32)
+            if gt_anns
+            else np.empty((0, 4), dtype=np.float32)
+        )
         gt_cats = [a["category_id"] for a in gt_anns]
 
-        pred_boxes = np.array([coco_to_xyxy(p["bbox"]) for p in preds], dtype=np.float32) if preds else np.empty((0, 4), dtype=np.float32)
+        pred_boxes = (
+            np.array([coco_to_xyxy(p["bbox"]) for p in preds], dtype=np.float32)
+            if preds
+            else np.empty((0, 4), dtype=np.float32)
+        )
         pred_cats = [p["category_id"] for p in preds]
 
-        matches, unmatched_preds, unmatched_gts = match_predictions_to_gt(
-            pred_boxes, gt_boxes, IOU_THRESHOLD
-        )
+        matches, unmatched_preds, unmatched_gts = match_predictions_to_gt(pred_boxes, gt_boxes, IOU_THRESHOLD)
 
         total_tp += len(matches)
         total_fp += len(unmatched_preds)
@@ -156,32 +163,43 @@ def score_file(pred_path, annotations, id_to_catname, val_image_ids=None):
     for cat_id in per_cat_total:
         total = per_cat_total[cat_id]
         correct = per_cat_correct.get(cat_id, 0)
-        per_cat_acc.append({
-            "cat": cat_id,
-            "name": id_to_catname.get(cat_id, "?"),
-            "total": total,
-            "correct": correct,
-            "errors": total - correct,
-            "acc": correct / total,
-        })
+        per_cat_acc.append(
+            {
+                "cat": cat_id,
+                "name": id_to_catname.get(cat_id, "?"),
+                "total": total,
+                "correct": correct,
+                "errors": total - correct,
+                "acc": correct / total,
+            }
+        )
     per_cat_acc.sort(key=lambda x: (x["acc"], -x["total"]))
 
     return {
         "file": str(pred_path),
         "n_images": len(image_ids),
         "detection": {
-            "tp": total_tp, "fp": total_fp, "fn": total_fn,
-            "recall": round(recall, 4), "precision": round(precision, 4),
+            "tp": total_tp,
+            "fp": total_fp,
+            "fn": total_fn,
+            "recall": round(recall, 4),
+            "precision": round(precision, 4),
         },
         "classification": {
-            "correct": cls_correct, "total": cls_total,
-            "accuracy": round(cls_acc, 4), "errors": n_errors,
+            "correct": cls_correct,
+            "total": cls_total,
+            "accuracy": round(cls_acc, 4),
+            "errors": n_errors,
         },
         "worst_categories": per_cat_acc[:20],
         "top_confusion": [
-            {"gt": gt, "pred": pred, "count": cnt,
-             "gt_name": id_to_catname.get(gt, "?")[:35],
-             "pred_name": id_to_catname.get(pred, "?")[:35]}
+            {
+                "gt": gt,
+                "pred": pred,
+                "count": cnt,
+                "gt_name": id_to_catname.get(gt, "?")[:35],
+                "pred_name": id_to_catname.get(pred, "?")[:35],
+            }
             for (gt, pred), cnt in confusion_pairs.most_common(15)
         ],
     }
@@ -197,6 +215,7 @@ def parse_args():
 
 def main():
     import sys
+
     sys.stdout.reconfigure(encoding="utf-8")
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = parse_args()
@@ -223,16 +242,24 @@ def main():
     logger.info("-" * 80)
     for r in results:
         d = r["detection"]
-        logger.info("%-40s  %6d  %6d  %6d  %8.4f  %6.4f",
-                     Path(r["file"]).name, d["tp"], d["fp"], d["fn"], d["recall"], d["precision"])
+        logger.info(
+            "%-40s  %6d  %6d  %6d  %8.4f  %6.4f",
+            Path(r["file"]).name,
+            d["tp"],
+            d["fp"],
+            d["fn"],
+            d["recall"],
+            d["precision"],
+        )
 
     logger.info("")
     logger.info("%-40s  %8s  %8s  %8s  %8s", "File", "Correct", "Total", "Errors", "Acc")
     logger.info("-" * 80)
     for r in results:
         c = r["classification"]
-        logger.info("%-40s  %8d  %8d  %8d  %8.4f",
-                     Path(r["file"]).name, c["correct"], c["total"], c["errors"], c["accuracy"])
+        logger.info(
+            "%-40s  %8d  %8d  %8d  %8.4f", Path(r["file"]).name, c["correct"], c["total"], c["errors"], c["accuracy"]
+        )
 
     # ── Detailed per-file ──
     for r in results:
@@ -241,8 +268,14 @@ def main():
         logger.info("DETAILS: %s", Path(r["file"]).name)
         logger.info("=" * 90)
         c = r["classification"]
-        logger.info("  Classification: %d/%d = %.4f (%.1f%% acc, %d errors)",
-                     c["correct"], c["total"], c["accuracy"], c["accuracy"] * 100, c["errors"])
+        logger.info(
+            "  Classification: %d/%d = %.4f (%.1f%% acc, %d errors)",
+            c["correct"],
+            c["total"],
+            c["accuracy"],
+            c["accuracy"] * 100,
+            c["errors"],
+        )
 
         logger.info("")
         logger.info("  Worst categories (min samples ≥ 2):")
@@ -250,9 +283,15 @@ def main():
         for cat in r["worst_categories"]:
             if cat["total"] < 2:
                 continue
-            logger.info("    cat=%3d  acc=%.2f  (%d/%d, %d err)  %s",
-                         cat["cat"], cat["acc"], cat["correct"], cat["total"],
-                         cat["errors"], cat["name"][:50])
+            logger.info(
+                "    cat=%3d  acc=%.2f  (%d/%d, %d err)  %s",
+                cat["cat"],
+                cat["acc"],
+                cat["correct"],
+                cat["total"],
+                cat["errors"],
+                cat["name"][:50],
+            )
             shown += 1
             if shown >= 15:
                 break
@@ -260,8 +299,9 @@ def main():
         logger.info("")
         logger.info("  Top confusion pairs:")
         for cp in r["top_confusion"][:10]:
-            logger.info("    %3d -> %3d  (%dx)  %s -> %s",
-                         cp["gt"], cp["pred"], cp["count"], cp["gt_name"], cp["pred_name"])
+            logger.info(
+                "    %3d -> %3d  (%dx)  %s -> %s", cp["gt"], cp["pred"], cp["count"], cp["gt_name"], cp["pred_name"]
+            )
 
 
 if __name__ == "__main__":
