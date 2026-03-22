@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(find:*)",
+      "Bash(nvidia-smi)",
+      "Bash(git status)",
+      "Bash(git add:*)",
+      "Bash(git diff:*)",
+      "Bash(python -m vision_task.plots*)",
+      "Bash(python -c*)",
+      "Bash(*)"
+    ]
+  }
+}
