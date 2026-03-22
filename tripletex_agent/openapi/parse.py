@@ -95,32 +95,18 @@ def parse_openapi(paths, schemas):
             # --- Request Body ---
             if "requestBody" in details:
                 content = details["requestBody"]["content"]
-
-                # if "application/json" in content:
-                #     schema = content["application/json"]["schema"]
-                # else:
-                #     # fallback (Tripletex uses charset variant)
-                #     key = list(content.keys())[0]
-                #     schema = content[key]["schema"]
                 schema = extract_schema(content)
                 endpoint['request_body'] = schema
-                # if schema:
-                #     endpoint["request_body"] = resolve_schema(schema, schemas)
-                # else:
-                #     print("⚠️ No schema found for:", endpoint["operation_id"])
-
+              
             # --- Response (200 only for now) ---
             responses = details.get("responses", {})
             if "200" in responses:
                 content = responses["200"].get("content", {})
-                # if "application/json" in content:
-                #     schema = content["application/json"]["schema"]
-                #     endpoint["response"] = resolve_schema(schema, schemas)
                 schema = extract_schema(content)
                 if schema:
                     endpoint["response"] = resolve_schema(schema, schemas)
                 else:
-                    print("⚠️ No schema found for:", endpoint["operation_id"])
+                    print("⚠️ No 200 response schema found for:", endpoint["operation_id"])
 
             endpoints.append(endpoint)
 
@@ -187,7 +173,6 @@ class Endpoint(BaseModel):
 
     @property
     def search_text(self):
-        # return normalize(self.summary)
         return normalize(" ".join([self.summary, self.path]))
     
     def __hash__(self):

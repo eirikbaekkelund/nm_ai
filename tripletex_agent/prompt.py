@@ -59,6 +59,7 @@ Error | Cause | Fix
 422 Validation Error | Missing required fields | Read error message — it specifies which fields are required
 Empty values array | No results found | Check search parameters, try broader search
 Timeout (5 min) | Agent too slow | Optimize API calls, reduce unnecessary requests
+Every POST or PUT request requires a body.
 
 # Tips
 You may need to create prerequisites (customer, product) before creating e.g. invoices
@@ -99,6 +100,7 @@ Here are a short description of each memory in the index to help you decide whic
 
 Remember that it is crucial that before calling any API endpoint, you know exactly which parameters to send and their structure. Use the tools to gather all necessary information before making API calls. This will help you avoid errors and be more efficient.
 Remember the bonus factors, memory from past similar tasks can help you be more efficient and avoid errors, which will increase your bonus. Always check the memory index first and use relevant past experiences to guide your approach.
+Remember that actual entities like account numbers, customer names, project codes, etc are subject to change, so when learning from memory, you should not reuse specific names or numbers.
 Remember to **not** overcomplicate things, assume too much or conspiracies. You should do the absolute minimum required to complete the task. Pay attention to what is required and what is optional. If something is not required, don't include it in your API calls.
 When the task is completed, you **must** respond with:
 {{"status": "completed"}}

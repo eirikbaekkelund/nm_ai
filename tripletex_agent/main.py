@@ -41,7 +41,7 @@ def read_root():
 
 
 from react import run_agent
-from files import parse_files
+from files import make_claude_file_block, parse_files
 from memory import get_memory_index, summarize_task
 
 @app.post("/solve")
@@ -57,6 +57,8 @@ async def solve(task: TaskRequest, background_tasks: BackgroundTasks):
 
     # Parse files 
     files = parse_files(task.files)
+    
+    # files = [make_claude_file_block(f.content_base64, f.mime_type) for f in task.files]
 
     # Run agent 
     result = await run_agent(task.prompt, files, MEMORY_INDEX, BASE_URL, SESSION_TOKEN)

@@ -6,6 +6,21 @@ from pdfminer.high_level import extract_text as pdf_extract_text
 from PIL import Image
 import pytesseract
 
+def make_claude_file_block(content_base64: str, mime_type: str):
+    if mime_type.startswith("image/"):
+        block_type = "image"
+    else:
+        block_type = "document"
+
+    return {
+        "type": block_type,
+        "source": {
+            "type": "base64",
+            "media_type": mime_type,
+            "data": content_base64
+        }
+    }
+
 def parse_file(file_obj) -> Any:
     """
     Parse a single uploaded file (CSV, PDF, image).

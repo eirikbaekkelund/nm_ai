@@ -25,10 +25,17 @@ async def run_agent(prompt, files, memory_index, base_url, token):
         print(prompt)
         print('##'*50)
 
-
     messages = [
         {"role": "user", "content": prompt}
     ]
+    # messages = [
+    #     {"role": "user", "content": [{'type': 'text', 'text': prompt}]}
+    # ]
+    # for file in files or []:
+    #     messages[0]["content"].append({
+    #         "type": file["type"],
+    #         "source": file["source"]
+    #     })
 
     task_solved = False
     max_iterations = 50

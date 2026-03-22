@@ -36,8 +36,9 @@ async def summarize_task(messages, memory_index):
     2. Error cleanliness — How many of the write calls resulted in 4xx errors (400, 404, 422, etc.)? Errors reduce the bonus. An agent that gets it right without trial-and-error is rewarded.
 
     You want to help the agent maximize its bonus in future similar tasks, so focus on insights that can help it be more efficient, fewer calls and make fewer write call errors.
-    
-    Task Input:
+    Therefore you **must** pay special attention to any calls that resulted in errors, and try to understand why the error happened and how to avoid it in the future.
+
+        Task Input:
     {messages[0]["content"]}
 
     Agent actions and thoughts:
@@ -58,10 +59,11 @@ async def summarize_task(messages, memory_index):
     {memory_index}
 
     If any of the above summaries covers the same task and has a good structure, there is no need to output a new summary, and instead you should output an empty json.
-    Rules:
+    
+    # Rules:
     - Be concise
     - **THIS IS VERY IMPORTANT**: Do not include explicit names or numbers (e.g. customer names, project names, account codes, etc.) in the summary, as these are subject to change. 
-    - Focus on reusable steps
+    - Focus on how to avoid error for write calls (POST, PUT) and how to make minimal necessary write calls
     - No explanations
     - Output ONLY JSON
     - Output empty JSON ({{}}) if the task is already well covered by an existing summary in memory (based on the provided memory index)

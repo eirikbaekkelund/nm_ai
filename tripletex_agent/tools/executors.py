@@ -21,6 +21,14 @@ def call_tripletex_api(base_url: str, session_token: str, action: dict) -> dict:
         except json.JSONDecodeError:
             pass
 
+    if action['method'] in ['POST', 'PUT'] and body is None:
+        # All post and put requests require a body 
+        return {
+            "action": action,
+            "status_code": 422,
+            "response": {"message": "POST and PUT requests require a body"}
+        }
+
     response = requests.request(
         method=action["method"],
         url=base_url + path,
