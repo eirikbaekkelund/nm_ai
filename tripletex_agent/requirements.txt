@@ -1,0 +1,9 @@
+requests
+fastapi==0.104.1
+pydantic==2.6.0
+uvicorn[standard]==0.24.0.post1
+python-dotenv==1.0.1
+anthropic
+pdfminer.six
+pillow
+pytesseract
