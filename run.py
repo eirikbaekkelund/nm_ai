@@ -53,7 +53,8 @@ UNKNOWN_CATEGORY_ID = 355
 UNKNOWN_THRESHOLD = 0.0
 
 # CAQE — Context-Aware Query Expansion
-CAQE_K = 3
+# Ablation sweep showed CAQE hurts mAP (corrupts score ranking). Disabled.
+CAQE_K = 0
 CAQE_ALPHA = 0.5
 
 # SAHI — Slicing Aided Hyper Inference
