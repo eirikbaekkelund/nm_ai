@@ -52,6 +52,10 @@ CROP_BUFFER = 0.05
 UNKNOWN_CATEGORY_ID = 355
 UNKNOWN_THRESHOLD = 0.0
 
+# CAQE — Context-Aware Query Expansion
+CAQE_K = 3
+CAQE_ALPHA = 0.5
+
 # SAHI — Slicing Aided Hyper Inference
 TILE_SIZE = 640
 TILE_OVERLAP = 0.25
@@ -327,6 +331,24 @@ def embed_crops(crop_tensors, model, device):
     return torch.cat(all_embs, dim=0)
 
 
+def apply_caqe(embeddings, boxes_xyxy, k=CAQE_K, alpha=CAQE_ALPHA):
+    """Context-Aware Query Expansion — boost each embedding with spatial neighbors."""
+    n = embeddings.shape[0]
+    if k <= 0 or n <= 1 or alpha >= 1.0:
+        return embeddings
+    eff_k = min(k, n - 1)
+    centroids = torch.stack([
+        (boxes_xyxy[:, 0] + boxes_xyxy[:, 2]) / 2,
+        (boxes_xyxy[:, 1] + boxes_xyxy[:, 3]) / 2,
+    ], dim=1)
+    dists = torch.cdist(centroids.unsqueeze(0).float(), centroids.unsqueeze(0).float()).squeeze(0)
+    dists.fill_diagonal_(float("inf"))
+    _, nn_indices = dists.topk(eff_k, dim=1, largest=False)
+    neighbor_mean = embeddings[nn_indices].mean(dim=1)
+    expanded = alpha * embeddings + (1 - alpha) * neighbor_mean
+    return F.normalize(expanded, dim=1)
+
+
 def match_to_refs(embeddings, ref_embs, ref_ids):
     """Match [N, D] embeddings to refs → (category_ids, cos_scores)."""
     sim = embeddings @ ref_embs.T
@@ -419,6 +441,11 @@ def main():
 
         embeddings = embed_crops(crop_tensors, cls_model, device)
         del crop_tensors
+
+        # CAQE: expand embeddings with spatial context from neighbors
+        if CAQE_K > 0 and len(valid_indices) > 1:
+            valid_boxes = boxes_xyxy[valid_indices]
+            embeddings = apply_caqe(embeddings, valid_boxes, k=CAQE_K, alpha=CAQE_ALPHA)
 
         cat_ids, cos_scores = match_to_refs(embeddings, ref_embs, ref_ids)
         del embeddings
