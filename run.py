@@ -57,9 +57,9 @@ UNKNOWN_THRESHOLD = 0.0
 CAQE_K = 0
 CAQE_ALPHA = 0.5
 
-# SAHI — Slicing Aided Hyper Inference
-TILE_SIZE = 640
-TILE_OVERLAP = 0.25
+# SAHI — Slicing Aided Hyper Inference (light: ~5 tiles/image to fit 300s timeout)
+TILE_SIZE = 2000
+TILE_OVERLAP = 0.15
 MIN_DIM_FOR_TILING = 2000
 WBF_IOU_THR = 0.55
 
@@ -181,10 +181,10 @@ def yolo_postprocess(output, conf_thresh, scale, pad_x, pad_y, orig_h, orig_w):
 # ── SAHI tiled detection ───────────────────────────────────────────────────
 
 
-def _run_yolo(yolo_sess, yolo_input_name, img_tensor, conf, device, orig_h, orig_w):
+def _run_yolo(yolo_sess, yolo_input_name, yolo_input_dtype, img_tensor, conf, device, orig_h, orig_w):
     """Letterbox + YOLO inference + postprocess on a single image/tile."""
     lb_tensor, scale, pad_x, pad_y = letterbox(img_tensor, DETECTOR_IMGSZ)
-    lb_np = lb_tensor.unsqueeze(0).cpu().numpy()
+    lb_np = lb_tensor.unsqueeze(0).cpu().numpy().astype(yolo_input_dtype)
     yolo_out_np = yolo_sess.run(None, {yolo_input_name: lb_np})[0]
     yolo_out = torch.from_numpy(yolo_out_np).to(device)
     boxes, scores = yolo_postprocess(
@@ -208,7 +208,7 @@ def generate_tiles(img_h, img_w, tile_size=TILE_SIZE, overlap=TILE_OVERLAP):
     return list(dict.fromkeys(tiles))
 
 
-def detect_with_tiles(yolo_sess, yolo_input_name, img_tensor, device, conf=DETECT_CONF):
+def detect_with_tiles(yolo_sess, yolo_input_name, yolo_input_dtype, img_tensor, device, conf=DETECT_CONF):
     """Full-image + tiled SAHI detection, merged via WBF.
 
     Returns (boxes_xyxy [N,4], scores [N]) in original image coordinates.
@@ -217,7 +217,7 @@ def detect_with_tiles(yolo_sess, yolo_input_name, img_tensor, device, conf=DETEC
 
     # Pass 1: full-image at 1280
     full_boxes, full_scores = _run_yolo(
-        yolo_sess, yolo_input_name, img_tensor, conf, device, orig_h, orig_w
+        yolo_sess, yolo_input_name, yolo_input_dtype, img_tensor, conf, device, orig_h, orig_w
     )
 
     # Skip tiling for small images
@@ -235,7 +235,7 @@ def detect_with_tiles(yolo_sess, yolo_input_name, img_tensor, device, conf=DETEC
         tile = img_tensor[:, ty1:ty2, tx1:tx2]
         _, tile_h, tile_w = tile.shape
         tboxes, tscores = _run_yolo(
-            yolo_sess, yolo_input_name, tile, conf, device, tile_h, tile_w
+            yolo_sess, yolo_input_name, yolo_input_dtype, tile, conf, device, tile_h, tile_w
         )
         if tboxes.shape[0] > 0:
             # Remap tile coords to original image coords
@@ -389,11 +389,13 @@ def main():
     yolo_sess = ort.InferenceSession(str(YOLO_WEIGHTS), providers=providers)
     yolo_input_name = yolo_sess.get_inputs()[0].name
 
-    # Probe YOLO output shape to auto-detect version
-    probe_input = np.zeros((1, 3, DETECTOR_IMGSZ, DETECTOR_IMGSZ), dtype=np.float32)
+    # Probe YOLO input dtype (FP16 or FP32) and output shape
+    yolo_input_type = yolo_sess.get_inputs()[0].type
+    yolo_input_dtype = np.float16 if "float16" in yolo_input_type else np.float32
+    probe_input = np.zeros((1, 3, DETECTOR_IMGSZ, DETECTOR_IMGSZ), dtype=yolo_input_dtype)
     probe_out = yolo_sess.run(None, {yolo_input_name: probe_input})[0]
     yolo_version = "YOLO26" if probe_out.shape[-1] == 6 else "YOLO11"
-    print(f"YOLO: {yolo_version}, output shape: {probe_out.shape}")
+    print(f"YOLO: {yolo_version}, dtype: {yolo_input_dtype.__name__}, output shape: {probe_out.shape}")
     del probe_out
 
     # Load native DINOv2 classifier
@@ -423,7 +425,7 @@ def main():
 
         # SAHI: full-image + tiled detection, merged via WBF
         boxes_xyxy, det_scores = detect_with_tiles(
-            yolo_sess, yolo_input_name,
+            yolo_sess, yolo_input_name, yolo_input_dtype,
             img_tensor, device, conf=args.detect_conf,
         )
 
